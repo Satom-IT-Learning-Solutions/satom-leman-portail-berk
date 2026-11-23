@@ -11,6 +11,10 @@ Parameters:
   DepotGithub:
     Type: String
     Default: Satom-IT-Learning-Solutions/satom-leman-portail-berk
+  DepotGithubAvecIds:
+    Type: String
+    Default: Satom-IT-Learning-Solutions@155011971/satom-leman-portail-berk@1468476442
+    Description: Forme du claim sub personnalisee par l'organisation (identifiants immuables), relevee dans CloudTrail
   CreerFournisseurOidc:
     Type: String
     AllowedValues: ["true", "false"]
@@ -170,6 +174,10 @@ Resources:
                   - !Sub "repo:${DepotGithub}:pull_request"
                   - !Sub "repo:${DepotGithub}:environment:dev"
                   - !Sub "repo:${DepotGithub}:environment:prod"
+                  - !Sub "repo:${DepotGithubAvecIds}:ref:refs/heads/main"
+                  - !Sub "repo:${DepotGithubAvecIds}:pull_request"
+                  - !Sub "repo:${DepotGithubAvecIds}:environment:dev"
+                  - !Sub "repo:${DepotGithubAvecIds}:environment:prod"
       Policies:
         - PolicyName: pilotage-cloudformation
           PolicyDocument:
