@@ -16,6 +16,16 @@ ROLE_EXEC="arn:aws:iam::${COMPTE}:role/leman-cfn-execution-${EQUIPE}"
 
 echo "== ${PILE} (${REGION}) version ${VERSION}"
 
+# En cas d'echec : causes CloudFormation de la pile et de ses piles imbriquees (diagnostic dans la pipeline)
+diagnostic() {
+  echo "== Diagnostic : evenements en echec"
+  for P in $(aws cloudformation list-stacks --region "$REGION" --query "StackSummaries[?starts_with(StackName,'${PILE}')].StackId" --output text); do
+    aws cloudformation describe-stack-events --region "$REGION" --stack-name "$P" --max-items 60 \
+      --query "StackEvents[?ends_with(ResourceStatus,'FAILED')].[Timestamp,LogicalResourceId,ResourceStatusReason]" --output text | head -5
+  done
+}
+trap 'diagnostic' ERR
+
 # 1. Artefact applicatif versionne
 aws s3 cp app/portail.py "s3://${BUCKET}/app/${VERSION}/portail.py" --region "$REGION" --only-show-errors
 
