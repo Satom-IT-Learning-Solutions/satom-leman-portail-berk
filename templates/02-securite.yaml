@@ -30,7 +30,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: !Sub "alb-sg-${Environnement}-${Equipe}"
-      GroupDescription: ALB du portail - 80 et 443 uniquement depuis CloudFront
+      GroupDescription: ALB du portail - HTTPS uniquement depuis CloudFront
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
