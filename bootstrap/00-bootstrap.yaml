@@ -147,6 +147,18 @@ Resources:
                 Effect: Allow
                 Action: [s3:GetObject]
                 Resource: !Sub "${BucketArtefacts.Arn}/*"
+              - Sid: PilesImbriquees
+                Effect: Allow
+                Action: [cloudformation:CreateStack, cloudformation:UpdateStack, cloudformation:DeleteStack,
+                         cloudformation:DescribeStacks, cloudformation:DescribeStackEvents, cloudformation:GetTemplate,
+                         cloudformation:TagResource, cloudformation:UntagResource]
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/stack-leman-*"
+              - Sid: TransmettreLeRoleAuxPilesImbriquees
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/leman-cfn-execution-${Equipe}"
+                Condition:
+                  StringEquals: {iam:PassedToService: cloudformation.amazonaws.com}
       Tags:
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
