@@ -26,6 +26,12 @@ Parameters:
     Type: String
     Description: Certificat ACM de la region (importe, domaine fictif - voir ADR-005)
 
+Mappings:
+  # Compte ELB des regions anterieures a aout 2022 (livraison des journaux d'acces)
+  CompteElb:
+    eu-north-1: {Compte: "arn:aws:iam::897822967062:root"}
+    eu-central-1: {Compte: "arn:aws:iam::054676820928:root"}
+
 Resources:
   BucketJournauxAlb:
     Type: AWS::S3::Bucket
@@ -61,6 +67,11 @@ Resources:
           - Sid: LivraisonJournauxElb
             Effect: Allow
             Principal: {Service: logdelivery.elasticloadbalancing.amazonaws.com}
+            Action: s3:PutObject
+            Resource: !Sub "${BucketJournauxAlb.Arn}/alb/AWSLogs/${AWS::AccountId}/*"
+          - Sid: LivraisonJournauxElbRegionHistorique
+            Effect: Allow
+            Principal: {AWS: !FindInMap [CompteElb, !Ref "AWS::Region", Compte]}
             Action: s3:PutObject
             Resource: !Sub "${BucketJournauxAlb.Arn}/alb/AWSLogs/${AWS::AccountId}/*"
           - Sid: TlsObligatoire
