@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: eu-central-2
+  AWS_REGION: eu-north-1
   ROLE_DEPLOIEMENT: arn:aws:iam::223310160799:role/leman-github-deploy-bkay
 
 jobs:
@@ -33,9 +33,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: Outils
-        run: pip install cfn-lint==1.* ruff pytest pytest-cov
+        run: pip install -r requirements-dev.txt
       - name: cfn-lint (templates)
-        run: cfn-lint
+        run: |
+          cfn-lint
       - name: ruff (lint et format)
         run: ruff check app scripts && ruff format --check app scripts
       - name: shellcheck (scripts Bash)
@@ -80,15 +81,10 @@ jobs:
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
           ./gitleaks git --redact --verbose --exit-code 1 .
-      - name: Trivy (dependances et configuration)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln,secret,misconfig
-          severity: CRITICAL,HIGH
-          exit-code: "1"
-          ignore-unfixed: true
+      - name: pip-audit (dependances, SCA)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements-dev.txt --strict --desc
       - name: Controle des CIDR (sprint 5)
         run: python scripts/verifier_cidr.py parameters
 

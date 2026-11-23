@@ -2,6 +2,8 @@
 framework:
   - cloudformation
   - github_actions
+skip-path:
+  - tests/guard   # cas negatifs volontaires pour cfn-guard
 compact: true
 quiet: true
 skip-check:

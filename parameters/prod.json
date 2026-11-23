@@ -4,7 +4,7 @@
   "CidrVpc": "10.0.0.0/16",
   "ActiverNat": "false",
   "CidrHomologue": "10.1.0.0/16",
-  "AmiId": "AMI_A_FIGER",
+  "AmiId": "ami-083dedce92603a2ad",
   "IpWeb": "10.0.2.10",
   "IpApp": "10.0.3.10",
   "IpDev": "",

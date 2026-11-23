@@ -2,7 +2,7 @@
 # Etape 7 : aucune alarme en etat ALARM, aucune non-conformite AWS Config sur le perimetre.
 set -euo pipefail
 ENV="${1:?usage: post_deploiement.sh <dev|prod>}"
-REGION="${AWS_REGION:-eu-central-2}"
+REGION="${AWS_REGION:-eu-north-1}"
 EN_ALARME=$(aws cloudwatch describe-alarms --region "$REGION" --alarm-name-prefix "alarm-" --state-value ALARM \
   --query "MetricAlarms[?contains(AlarmName, '-${ENV}-bkay')].AlarmName" --output text)
 echo "Alarmes en etat ALARM : ${EN_ALARME:-aucune}"
