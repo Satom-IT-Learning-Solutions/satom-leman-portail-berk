@@ -29,7 +29,7 @@ Resources:
   SgAlb:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub "sg-alb-${Environnement}-${Equipe}"
+      GroupName: !Sub "alb-sg-${Environnement}-${Equipe}"
       GroupDescription: ALB du portail - HTTPS uniquement depuis CloudFront
       VpcId: !Ref VpcId
       SecurityGroupIngress:
@@ -47,7 +47,7 @@ Resources:
   SgWeb:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub "sg-web-${Environnement}-${Equipe}"
+      GroupName: !Sub "web-sg-${Environnement}-${Equipe}"
       GroupDescription: web-01 - HTTP 80 depuis l ALB uniquement
       VpcId: !Ref VpcId
       SecurityGroupIngress:
@@ -69,7 +69,7 @@ Resources:
   SgApp:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub "sg-app-${Environnement}-${Equipe}"
+      GroupName: !Sub "app-sg-${Environnement}-${Equipe}"
       GroupDescription: app-01 - API 8080 depuis sg-web et l ALB (regle /api/*) uniquement
       VpcId: !Ref VpcId
       SecurityGroupIngress:
