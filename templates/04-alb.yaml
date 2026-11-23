@@ -31,7 +31,6 @@ Mappings:
   CompteElb:
     eu-north-1: {Compte: "arn:aws:iam::897822967062:root"}
     eu-central-1: {Compte: "arn:aws:iam::054676820928:root"}
-    eu-central-2: {Compte: "arn:aws:iam::635631232127:root"}
 
 Resources:
   BucketJournauxAlb:
