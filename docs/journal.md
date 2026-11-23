@@ -23,3 +23,4 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - `stack-leman-bootstrap` CREATE_COMPLETE (eu-north-1) : fournisseur OIDC GitHub (aucun n'existait dans le compte), roles `leman-github-deploy-bkay` et `leman-cfn-execution-bkay`, bucket `leman-artefacts-bkay-223310160799-eu-north-1`.
 - Pile budget en us-east-1 refusee par une SCP de l'organisation : budget `budget-leman-bkay` du module 0 reutilise (ADR-006), WAF regional sur l'ALB (ADR-011).
 - checkov : le cas negatif `tests/guard/` est exclu de l'analyse (il doit echouer volontairement).
+- Trivy : installation impossible depuis le runner (binaire de release indisponible) ; analyse SCA par pip-audit sur `requirements-dev.txt` (versions figees, 0 vulnerabilite). L'application n'a aucune dependance tierce.
