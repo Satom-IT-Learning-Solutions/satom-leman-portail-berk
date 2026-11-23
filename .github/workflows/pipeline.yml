@@ -40,7 +40,7 @@ jobs:
       - name: ruff (lint et format)
         run: ruff check app scripts && ruff format --check app scripts
       - name: shellcheck (scripts Bash)
-        run: shellcheck scripts/*.sh tests/connectivity/*.sh
+        run: shellcheck -x scripts/*.sh tests/connectivity/*.sh tests/mesures/*.sh
       - name: Tests unitaires et couverture
         run: python -m pytest --cov --cov-report=xml:coverage.xml --cov-report=term
       - uses: actions/upload-artifact@v4
