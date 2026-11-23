@@ -39,8 +39,15 @@ print(" ".join(f"ParameterKey={k},ParameterValue={v}" for k, v in p.items()))
 PY
 )
 
-# 4. Change set
-if aws cloudformation describe-stacks --stack-name "$PILE" --region "$REGION" >/dev/null 2>&1; then TYPE=UPDATE; else TYPE=CREATE; fi
+# 4. Change set (une pile en ROLLBACK_COMPLETE n'a jamais existe : elle est supprimee avant recreation)
+ETAT="$(aws cloudformation describe-stacks --stack-name "$PILE" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo ABSENTE)"
+if [[ "$ETAT" == ROLLBACK_COMPLETE ]]; then
+  echo "Pile ${PILE} en ROLLBACK_COMPLETE (creation echouee) : suppression avant nouvelle tentative"
+  aws cloudformation delete-stack --region "$REGION" --stack-name "$PILE" --role-arn "$ROLE_EXEC"
+  aws cloudformation wait stack-delete-complete --region "$REGION" --stack-name "$PILE"
+  ETAT=ABSENTE
+fi
+if [[ "$ETAT" == ABSENTE ]]; then TYPE=CREATE; else TYPE=UPDATE; fi
 CS="cs-${VERSION}-$(date +%s)"
 # shellcheck disable=SC2086
 aws cloudformation create-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
