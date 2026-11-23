@@ -20,3 +20,6 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Premiere execution de la pipeline en echec (attendu, voir taux d'echec DORA) : `AWS::Budgets::Budget` n'existe pas en region (budget deplace dans `bootstrap/01-budget.yaml`, us-east-1) ; action Trivy introuvable (installation par script, version figee).
 - eu-central-2 desactivee sur le compte partage : deploiement en eu-north-1 (ADR-010).
 - Nom de l'ALB `alb-<env>-portail-bkay` pour eviter la collision avec l'ALB du module 9 (`alb-prod-leman-bkay`) encore present jusqu'a l'evaluation.
+- `stack-leman-bootstrap` CREATE_COMPLETE (eu-north-1) : fournisseur OIDC GitHub (aucun n'existait dans le compte), roles `leman-github-deploy-bkay` et `leman-cfn-execution-bkay`, bucket `leman-artefacts-bkay-223310160799-eu-north-1`.
+- Pile budget en us-east-1 refusee par une SCP de l'organisation : budget `budget-leman-bkay` du module 0 reutilise (ADR-006), WAF regional sur l'ALB (ADR-011).
+- checkov : le cas negatif `tests/guard/` est exclu de l'analyse (il doit echouer volontairement).

@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   Gate G0 - Socle de la pipeline : federation OIDC GitHub, role de deploiement au moindre
-  privilege, role d'execution CloudFormation, bucket d'artefacts chiffre, (budget : bootstrap/01-budget.yaml, us-east-1).
+  privilege, role d'execution CloudFormation, bucket d'artefacts chiffre, (budget : budget-leman-bkay existant, voir ADR-006).
   Deploye une seule fois a la main (amorcage), puis gere par change set.
 
 Parameters:

@@ -37,7 +37,6 @@ jobs:
       - name: cfn-lint (templates)
         run: |
           cfn-lint
-          cfn-lint bootstrap/01-budget.yaml --regions us-east-1
       - name: ruff (lint et format)
         run: ruff check app scripts && ruff format --check app scripts
       - name: shellcheck (scripts Bash)
