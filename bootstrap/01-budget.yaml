@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Gate G0 - Budget de l'equipe (150, alerte a 80 %). AWS::Budgets::Budget n'existe pas en
+  eu-north-1 : cette pile est deployee en us-east-1 (service global). Voir ADR-006.
+
+Parameters:
+  Equipe:
+    Type: String
+    Default: bkay
+  EmailAlertes:
+    Type: String
+    Default: berk.kaymaz@git.swiss
+  BudgetMensuel:
+    Type: Number
+    Default: 150
+
+Resources:
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "budget-tp-final-${Equipe}"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: {Amount: !Ref BudgetMensuel, Unit: USD}
+        CostFilters:
+          TagKeyValue: [!Sub "user:Equipe$${Equipe}"]
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref EmailAlertes}]
+        - Notification: {NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref EmailAlertes}]
+
+Outputs:
+  NomBudget:
+    Value: !Ref Budget

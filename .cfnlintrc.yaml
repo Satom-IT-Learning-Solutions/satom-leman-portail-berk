@@ -1,5 +1,7 @@
 templates:
   - templates/*.yaml
-  - bootstrap/*.yaml
+  - bootstrap/00-bootstrap.yaml
+regions:
+  - eu-north-1
 ignore_checks:
   - W3002   # TemplateURL relatives resolues par "aws cloudformation package"

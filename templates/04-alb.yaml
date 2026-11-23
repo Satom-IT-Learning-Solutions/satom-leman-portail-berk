@@ -74,7 +74,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     DependsOn: PolitiqueBucketJournauxAlb
     Properties:
-      Name: !Sub "alb-${Environnement}-leman-${Equipe}"
+      Name: !Sub "alb-${Environnement}-portail-${Equipe}"
       Type: application
       Scheme: internet-facing
       Subnets: [!Ref SubPublic1a, !Ref SubPublic1b]
@@ -86,7 +86,7 @@ Resources:
         - {Key: routing.http.drop_invalid_header_fields.enabled, Value: "true"}
         - {Key: deletion_protection.enabled, Value: "false"}
       Tags:
-        - {Key: Name, Value: !Sub "alb-${Environnement}-leman-${Equipe}"}
+        - {Key: Name, Value: !Sub "alb-${Environnement}-portail-${Equipe}"}
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
         - {Key: Environnement, Value: !Ref Environnement}

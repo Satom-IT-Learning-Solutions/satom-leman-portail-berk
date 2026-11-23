@@ -5,7 +5,7 @@ set -euo pipefail
 
 ENV="${1:?usage: deployer.sh <dev|prod> [--auto]}"
 AUTO="${2:-}"
-REGION="${AWS_REGION:-eu-central-2}"
+REGION="${AWS_REGION:-eu-north-1}"
 EQUIPE="bkay"
 PILE="stack-leman-${ENV}"
 COMPTE="$(aws sts get-caller-identity --query Account --output text)"

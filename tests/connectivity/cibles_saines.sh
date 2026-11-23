@@ -2,9 +2,9 @@
 # Verifie que toutes les cibles des groupes de l'ALB d'une pile sont saines (attente max 5 min).
 set -euo pipefail
 PILE="${1:?usage: cibles_saines.sh <pile>}"
-REGION="${AWS_REGION:-eu-central-2}"
+REGION="${AWS_REGION:-eu-north-1}"
 ENV="${PILE##*-}"
-ALB_ARN=$(aws elbv2 describe-load-balancers --region "$REGION" --names "alb-${ENV}-leman-bkay" \
+ALB_ARN=$(aws elbv2 describe-load-balancers --region "$REGION" --names "alb-${ENV}-portail-bkay" \
   --query 'LoadBalancers[0].LoadBalancerArn' --output text)
 for essai in $(seq 1 30); do
   MALADES=0

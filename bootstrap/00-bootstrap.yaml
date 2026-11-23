@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   Gate G0 - Socle de la pipeline : federation OIDC GitHub, role de deploiement au moindre
-  privilege, role d'execution CloudFormation, bucket d'artefacts chiffre, budget et alerte.
+  privilege, role d'execution CloudFormation, bucket d'artefacts chiffre, (budget : bootstrap/01-budget.yaml, us-east-1).
   Deploye une seule fois a la main (amorcage), puis gere par change set.
 
 Parameters:
@@ -16,13 +16,6 @@ Parameters:
     AllowedValues: ["true", "false"]
     Default: "true"
     Description: false si le fournisseur token.actions.githubusercontent.com existe deja dans le compte
-  EmailAlertes:
-    Type: String
-    Default: berk.kaymaz@git.swiss
-  BudgetMensuel:
-    Type: Number
-    Default: 150
-    Description: Montant du budget (150 CHF demandes, le service Budgets compte en USD - voir ADR-006)
 
 Conditions:
   AvecOidc: !Equals [!Ref CreerFournisseurOidc, "true"]
@@ -122,7 +115,7 @@ Resources:
                   - lambda:*
                 Resource: "*"
                 Condition:
-                  StringEquals: {aws:RequestedRegion: [eu-central-2, us-east-1]}
+                  StringEquals: {aws:RequestedRegion: [eu-north-1, us-east-1]}
               - Sid: KmsDesJournaux
                 Effect: Allow
                 Action: [kms:CreateKey, kms:CreateAlias, kms:DeleteAlias, kms:DescribeKey, kms:EnableKeyRotation,
@@ -215,22 +208,6 @@ Resources:
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
         - {Key: Environnement, Value: prod}
-
-  Budget:
-    Type: AWS::Budgets::Budget
-    Properties:
-      Budget:
-        BudgetName: !Sub "budget-tp-final-${Equipe}"
-        BudgetType: COST
-        TimeUnit: MONTHLY
-        BudgetLimit: {Amount: !Ref BudgetMensuel, Unit: USD}
-        CostFilters:
-          TagKeyValue: [!Sub "user:Equipe$${Equipe}"]
-      NotificationsWithSubscribers:
-        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
-          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref EmailAlertes}]
-        - Notification: {NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
-          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref EmailAlertes}]
 
 Outputs:
   RoleDeploiementArn:
