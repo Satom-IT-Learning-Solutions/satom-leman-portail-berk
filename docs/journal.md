@@ -29,3 +29,10 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Premier deploiement dev par la pipeline refuse (`Not authorized to perform sts:AssumeRoleWithWebIdentity`). CloudTrail montre le claim `sub` reel : `repo:Satom-IT-Learning-Solutions@155011971/satom-leman-portail-berk@1468476442:environment:dev` (l'organisation ajoute ses identifiants immuables). Condition de confiance du role completee, toujours limitee a ce depot, a `main`, aux PR et aux environnements dev/prod.
 - Deuxieme tentative : OIDC accepte, creation de `stack-leman-dev` en ROLLBACK_COMPLETE : le role d'execution doit pouvoir se transmettre aux piles imbriquees (`iam:PassRole` sur lui-meme et `cloudformation:*Stack` sur `stack-leman-*`). Le script supprime desormais une pile en ROLLBACK_COMPLETE avant de recreer.
 - Troisieme tentative : reseau cree ; Security Groups refuses (`Group names may not be in the format sg-*`). Noms de groupe `alb-sg-*`, `web-sg-*`, `app-sg-*` ; les balises Name conservent sg-alb / sg-web / sg-app de l'enonce.
+
+### 23/11/2026 - Sprints 1 a 3 (dev) et preparation du sprint 11
+- `stack-leman-dev` CREATE_COMPLETE par la pipeline (etape 4) ; etape 5 verte (cibles tg-web et tg-app saines). Etape 6 en attente d'approbation manuelle (environnement GitHub `prod`).
+- Mesure sprint 1 : 5 sous-reseaux sur eu-north-1a et 1b (10.1.1.0/24, 10.1.2.0/24, 10.1.3.0/24, 10.1.4.0/28, 10.1.5.0/24), aucune IP publique automatique.
+- Mesure sprint 2 : table privee sans route par defaut (NAT desactivee hors session), aucune route privee vers l'IGW.
+- Mesure sprint 3 : Reachability Analyzer web-01 -> app-01 tcp/8080 accessible (True), tcp/22 bloque (False, `ENI_SG_RULES_MISMATCH`).
+- Sprint 11 prepare : pile `stack-leman-<env>-edge` (CloudFront, /static/* depuis S3 avec OAC, /api/* sans cache, en-tetes de securite, WAF regional). Derogations checkov documentees dans les templates (ADR-005, ADR-011, ADR-012).

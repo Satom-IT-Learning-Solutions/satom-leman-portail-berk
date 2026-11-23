@@ -77,3 +77,13 @@ aws cloudformation execute-change-set --region "$REGION" --stack-name "$PILE" --
 if [[ "$TYPE" == CREATE ]]; then aws cloudformation wait stack-create-complete --region "$REGION" --stack-name "$PILE"
 else aws cloudformation wait stack-update-complete --region "$REGION" --stack-name "$PILE"; fi
 aws cloudformation describe-stacks --region "$REGION" --stack-name "$PILE" --query 'Stacks[0].[StackStatus,Outputs]' --output json
+
+# 6. Bordure (sprint 11) : CloudFront, OAC, WAF regional - pile separee pour pouvoir la supprimer seule
+sortie() { aws cloudformation describe-stacks --region "$REGION" --stack-name "$1" \
+  --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text; }
+aws cloudformation deploy --region "$REGION" --stack-name "${PILE}-edge" --template-file templates/06-edge.yaml \
+  --parameter-overrides Environnement="$ENV" Equipe="$EQUIPE" AlbDns="$(sortie "$PILE" AlbDns)" AlbArn="$(sortie "$PILE" AlbArn)" \
+  --role-arn "$ROLE_EXEC" --no-fail-on-empty-changeset \
+  --tags Projet=SatomCloudNetwork Equipe="$EQUIPE" Environnement="$ENV"
+aws s3 sync app/static "s3://$(sortie "${PILE}-edge" BucketStatique)/static/" --region "$REGION" --only-show-errors --delete
+echo "Portail : https://$(sortie "${PILE}-edge" DomaineDistribution)/"

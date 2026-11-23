@@ -138,6 +138,8 @@ Outputs:
     Value: !GetAtt Equilibrage.Outputs.AlbDns
   AlbZoneId:
     Value: !GetAtt Equilibrage.Outputs.AlbZoneId
+  AlbArn:
+    Value: !GetAtt Equilibrage.Outputs.AlbArn
   WebInstanceId:
     Value: !GetAtt Calcul.Outputs.WebInstanceId
   AppInstanceId:

@@ -218,6 +218,16 @@ Resources:
                 Effect: Allow
                 Action: [s3:PutObject, s3:GetObject, s3:ListBucket]
                 Resource: [!GetAtt BucketArtefacts.Arn, !Sub "${BucketArtefacts.Arn}/*"]
+              - Sid: RessourcesStatiques
+                Effect: Allow
+                Action: [s3:PutObject, s3:GetObject, s3:ListBucket, s3:DeleteObject]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::leman-static-*-${Equipe}-${AWS::AccountId}"
+                  - !Sub "arn:${AWS::Partition}:s3:::leman-static-*-${Equipe}-${AWS::AccountId}/*"
+              - Sid: InvalidationCache
+                Effect: Allow
+                Action: [cloudfront:CreateInvalidation, cloudfront:GetInvalidation, cloudfront:GetDistribution]
+                Resource: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*"
               - Sid: LectureEtMesures
                 Effect: Allow
                 Action: [ec2:Describe*, elasticloadbalancing:Describe*, cloudwatch:GetMetricData,

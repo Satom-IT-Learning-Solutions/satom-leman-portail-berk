@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 11 - Bordure : distribution CloudFront d-leman-portail (comportements /static/* depuis
+  S3 avec OAC, /api/* sans cache), en-tetes de securite, WAF regional sur l'ALB (ADR-011).
+  Pile separee (stack-leman-<env>-edge), deployee en eu-north-1.
+
+Parameters:
+  Environnement:
+    Type: String
+    AllowedValues: [dev, prod]
+  Equipe:
+    Type: String
+    Default: bkay
+  AlbDns:
+    Type: String
+  AlbArn:
+    Type: String
+  LimiteRequetesParIp:
+    Type: Number
+    Default: 1000
+    Description: Requetes par IP sur 5 minutes avant blocage (limitation de debit WAF)
+
+Resources:
+  # ---------- Ressources statiques : S3 prive, lu uniquement par CloudFront (OAC) ----------
+  BucketStatique:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub "leman-static-${Environnement}-${Equipe}-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      VersioningConfiguration: {Status: Enabled}
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  ControleAccesOrigine:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "oac-leman-static-${Environnement}-${Equipe}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  PolitiqueBucketStatique:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketStatique
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: LectureParCloudFrontUniquement
+            Effect: Allow
+            Principal: {Service: cloudfront.amazonaws.com}
+            Action: s3:GetObject
+            Resource: !Sub "${BucketStatique.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+          - Sid: TlsObligatoire
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource: [!GetAtt BucketStatique.Arn, !Sub "${BucketStatique.Arn}/*"]
+            Condition: {Bool: {aws:SecureTransport: "false"}}
+
+  # ---------- En-tetes de securite ajoutes a toutes les reponses ----------
+  PolitiqueEnTetes:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "rhp-leman-${Environnement}-${Equipe}"
+        SecurityHeadersConfig:
+          StrictTransportSecurity: {AccessControlMaxAgeSec: 31536000, IncludeSubdomains: true, Preload: false, Override: true}
+          ContentTypeOptions: {Override: true}
+          FrameOptions: {FrameOption: DENY, Override: true}
+          ReferrerPolicy: {ReferrerPolicy: no-referrer, Override: true}
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'"
+            Override: true
+        RemoveHeadersConfig:
+          Items: [{Header: Server}]
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Metadata:
+      checkov:
+        skip:
+          - {id: CKV_AWS_68, comment: "WAF CLOUDFRONT impossible (SCP us-east-1) - WAF regional sur l'ALB, ADR-011"}
+          - {id: CKV_AWS_86, comment: "Journaux standard S3 exigent des ACL ; metriques CloudFront et journaux ALB utilises - ADR-012"}
+          - {id: CKV_AWS_174, comment: "Certificat par defaut *.cloudfront.net (TLS 1.2 minimum impose par AWS) - ADR-005"}
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "d-leman-portail ${Environnement} - ${Equipe}"
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        DefaultRootObject: ""
+        Origins:
+          - Id: alb
+            DomainName: !Ref AlbDns
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only   # voir ADR-005 : certificat d'origine non public
+              HTTPPort: 80
+              OriginReadTimeout: 30
+          - Id: statique
+            DomainName: !GetAtt BucketStatique.RegionalDomainName
+            OriginAccessControlId: !GetAtt ControleAccesOrigine.Id
+            S3OriginConfig: {OriginAccessIdentity: ""}
+        DefaultCacheBehavior:
+          TargetOriginId: alb
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # CachingDisabled
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
+          ResponseHeadersPolicyId: !Ref PolitiqueEnTetes
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: /static/*
+            TargetOriginId: statique
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6        # CachingOptimized
+            ResponseHeadersPolicyId: !Ref PolitiqueEnTetes
+            Compress: true
+          - PathPattern: /api/*
+            TargetOriginId: alb
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            ResponseHeadersPolicyId: !Ref PolitiqueEnTetes
+            Compress: true
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+      Tags:
+        - {Key: Name, Value: !Sub "d-leman-portail-${Environnement}-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  # ---------- WAF regional sur l'ALB (ADR-011) ----------
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "waf-leman-${Environnement}-${Equipe}"
+      Scope: REGIONAL
+      DefaultAction: {Allow: {}}
+      VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: !Sub "waf-leman-${Environnement}-${Equipe}"}
+      Rules:
+        - Name: limitation-debit-par-ip
+          Priority: 0
+          Action: {Block: {}}
+          Statement:
+            RateBasedStatement:
+              Limit: !Ref LimiteRequetesParIp
+              AggregateKeyType: FORWARDED_IP
+              ForwardedIPConfig: {HeaderName: X-Forwarded-For, FallbackBehavior: MATCH}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: limitation-debit}
+        - Name: aws-common
+          Priority: 1
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesCommonRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: aws-common}
+        - Name: aws-entrees-malveillantes
+          Priority: 2
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesKnownBadInputsRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: aws-bad-inputs}
+        - Name: aws-reputation-ip
+          Priority: 3
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesAmazonIpReputationList}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: aws-ip-reputation}
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  AssociationWaf:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Ref AlbArn
+      WebACLArn: !GetAtt WebAcl.Arn
+
+Outputs:
+  DomaineDistribution:
+    Value: !GetAtt Distribution.DomainName
+  DistributionId:
+    Value: !Ref Distribution
+  BucketStatique:
+    Value: !Ref BucketStatique
+  WebAclArn:
+    Value: !GetAtt WebAcl.Arn
