@@ -151,7 +151,9 @@ Resources:
                 Effect: Allow
                 Action: [cloudformation:CreateStack, cloudformation:UpdateStack, cloudformation:DeleteStack,
                          cloudformation:DescribeStacks, cloudformation:DescribeStackEvents, cloudformation:GetTemplate,
-                         cloudformation:TagResource, cloudformation:UntagResource]
+                         cloudformation:TagResource, cloudformation:UntagResource,
+                         cloudformation:CreateChangeSet, cloudformation:DescribeChangeSet,
+                         cloudformation:ExecuteChangeSet, cloudformation:DeleteChangeSet]
                 Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/stack-leman-*"
               - Sid: TransmettreLeRoleAuxPilesImbriquees
                 Effect: Allow
