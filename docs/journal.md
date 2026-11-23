@@ -24,3 +24,5 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Pile budget en us-east-1 refusee par une SCP de l'organisation : budget `budget-leman-bkay` du module 0 reutilise (ADR-006), WAF regional sur l'ALB (ADR-011).
 - checkov : le cas negatif `tests/guard/` est exclu de l'analyse (il doit echouer volontairement).
 - Trivy : installation impossible depuis le runner (binaire de release indisponible) ; analyse SCA par pip-audit sur `requirements-dev.txt` (versions figees, 0 vulnerabilite). L'application n'a aucune dependance tierce.
+- AMI Amazon Linux 2023 figee : `ami-083dedce92603a2ad` (eu-north-1, 23/11/2026, ADR-004).
+- Certificat de l'ALB : auto-signe `portefeuilles.leman-finance.example` (90 jours) genere dans CloudShell et importe dans ACM avec les balises de l'equipe ; la cle privee est supprimee apres import. ARN publie dans le parametre SSM `/leman-bkay/certificat-alb-arn` (ADR-005). Un certificat homonyme d'un autre eleve existe dans le compte partage : il n'est pas utilise.

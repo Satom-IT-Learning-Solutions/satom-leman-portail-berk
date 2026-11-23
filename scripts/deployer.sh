@@ -23,8 +23,8 @@ aws s3 cp app/portail.py "s3://${BUCKET}/app/${VERSION}/portail.py" --region "$R
 PL_CF="$(aws ec2 describe-managed-prefix-lists --region "$REGION" \
   --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing \
   --query 'PrefixLists[0].PrefixListId' --output text)"
-CERT="$(aws acm list-certificates --region "$REGION" \
-  --query "CertificateSummaryList[?DomainName=='portefeuilles.leman-finance.example'].CertificateArn | [0]" --output text)"
+# Certificat importe de l'equipe (ADR-005) : ARN publie dans SSM, jamais la cle privee
+CERT="$(aws ssm get-parameter --region "$REGION" --name /leman-bkay/certificat-alb-arn --query Parameter.Value --output text)"
 
 # 3. Paquetage des piles imbriquees
 aws cloudformation package --region "$REGION" --template-file templates/main.yaml \
