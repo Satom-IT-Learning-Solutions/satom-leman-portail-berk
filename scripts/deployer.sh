@@ -19,7 +19,8 @@ echo "== ${PILE} (${REGION}) version ${VERSION}"
 # En cas d'echec : causes CloudFormation de la pile et de ses piles imbriquees (diagnostic dans la pipeline)
 diagnostic() {
   echo "== Diagnostic : evenements en echec"
-  for P in $(aws cloudformation list-stacks --region "$REGION" --query "StackSummaries[?starts_with(StackName,'${PILE}')].StackId" --output text); do
+  for P in "$PILE" $(aws cloudformation describe-stack-resources --region "$REGION" --stack-name "$PILE" \
+      --query "StackResources[?ResourceType=='AWS::CloudFormation::Stack'].PhysicalResourceId" --output text 2>/dev/null); do
     aws cloudformation describe-stack-events --region "$REGION" --stack-name "$P" --max-items 60 \
       --query "StackEvents[?ends_with(ResourceStatus,'FAILED')].[Timestamp,LogicalResourceId,ResourceStatusReason]" --output text | head -5
   done
@@ -62,7 +63,7 @@ CS="cs-${VERSION}-$(date +%s)"
 # shellcheck disable=SC2086
 aws cloudformation create-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
   --change-set-type "$TYPE" --template-body "file:///tmp/main-${ENV}.yaml" --parameters $PARAMS \
-  --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --role-arn "$ROLE_EXEC" \
+  --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --role-arn "$ROLE_EXEC" --include-nested-stacks \
   --tags Key=Projet,Value=SatomCloudNetwork Key=Equipe,Value="$EQUIPE" Key=Environnement,Value="$ENV" >/dev/null
 
 if ! aws cloudformation wait change-set-create-complete --region "$REGION" --stack-name "$PILE" --change-set-name "$CS"; then
@@ -74,9 +75,18 @@ fi
 aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
   --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' --output table
 
-# Garde-fou : aucune suppression ni remplacement non confirme
-DANGER=$(aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
-  --query "length(Changes[?ResourceChange.Action=='Remove' || ResourceChange.Replacement=='True'])" --output text)
+# Garde-fou : aucune suppression ni remplacement non confirme, y compris dans les piles imbriquees
+compter_dangers() {
+  aws cloudformation describe-change-set --region "$REGION" --change-set-name "$1" ${2:+--stack-name "$2"} \
+    --query "length(Changes[?ResourceChange.Action=='Remove' || ResourceChange.Replacement=='True'])" --output text
+}
+DANGER=$(compter_dangers "$CS" "$PILE")
+for CS_IMBRIQUE in $(aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
+    --query "Changes[?ResourceChange.ChangeSetId].ResourceChange.ChangeSetId" --output text); do
+  aws cloudformation describe-change-set --region "$REGION" --change-set-name "$CS_IMBRIQUE" \
+    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' --output table
+  DANGER=$((DANGER + $(compter_dangers "$CS_IMBRIQUE")))
+done
 if [[ "$DANGER" != "0" && "${CONFIRMER_SUPPRESSION:-non}" != "oui" ]]; then
   echo "Le change set supprime ou remplace ${DANGER} ressource(s). Relancer avec CONFIRMER_SUPPRESSION=oui apres relecture."
   exit 2
