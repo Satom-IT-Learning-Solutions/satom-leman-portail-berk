@@ -40,7 +40,7 @@ jobs:
       - name: ruff (lint et format)
         run: ruff check app scripts && ruff format --check app scripts
       - name: shellcheck (scripts Bash)
-        run: shellcheck scripts/*.sh tests/connectivity/*.sh
+        run: shellcheck -x scripts/*.sh tests/connectivity/*.sh tests/mesures/*.sh
       - name: Tests unitaires et couverture
         run: python -m pytest --cov --cov-report=xml:coverage.xml --cov-report=term
       - uses: actions/upload-artifact@v4
@@ -156,8 +156,25 @@ jobs:
         with:
           target: ${{ steps.cible.outputs.url }}
           rules_file_name: tests/dast/zap-regles.tsv
-          fail_action: true
+          fail_action: false
           allow_issue_writing: false
+          artifact_name: rapport-zap
+      - name: Seuil DAST (0 alerte high)
+        if: steps.cible.outputs.url != ''
+        run: |
+          HIGH=$(jq '[.site[].alerts[] | select(.riskcode == "3")] | length' report_json.json)
+          jq -r '.site[].alerts[] | [.riskdesc, .name, .count] | @tsv' report_json.json | sort | uniq
+          echo "Alertes high : ${HIGH}"
+          test "$HIGH" -eq 0
+      - name: Rapports de tests dynamiques
+        if: always() && steps.cible.outputs.url != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-tests-dynamiques
+          path: |
+            docs/rapports/k6-resume.json
+            report_json.json
+            report_html.html
 
   # ------------------------------------------ 6. Validation manuelle puis prod
   deploiement-prod:

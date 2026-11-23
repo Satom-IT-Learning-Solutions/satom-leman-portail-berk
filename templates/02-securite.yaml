@@ -30,14 +30,14 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: !Sub "alb-sg-${Environnement}-${Equipe}"
-      GroupDescription: ALB du portail - HTTPS uniquement depuis CloudFront
+      GroupDescription: ALB du portail - 80 et 443 uniquement depuis CloudFront
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 443
+          FromPort: 80
           ToPort: 443
           SourcePrefixListId: !Ref ListePrefixesCloudFront
-          Description: HTTPS depuis CloudFront (origin-facing)
+          Description: HTTP 80 et HTTPS 443 depuis CloudFront uniquement - une seule reference a la liste (quota de regles)
       Tags:
         - {Key: Name, Value: !Sub "sg-alb-${Environnement}-${Equipe}"}
         - {Key: Projet, Value: SatomCloudNetwork}

@@ -73,8 +73,7 @@ rule buckets_chiffres_et_prives when %buckets !empty {
 # 5. ALB : TLS 1.2 minimum et journaux d'acces actives
 let ecouteurs = Resources.*[ Type == 'AWS::ElasticLoadBalancingV2::Listener' ]
 rule ecouteur_tls12 when %ecouteurs !empty {
-    %ecouteurs.Properties {
-        Protocol == 'HTTPS'
+    %ecouteurs[ Properties.Protocol == 'HTTPS' ].Properties {
         SslPolicy in ['ELBSecurityPolicy-TLS13-1-2-2021-06', 'ELBSecurityPolicy-TLS-1-2-2017-01', 'ELBSecurityPolicy-TLS13-1-2-Res-2021-06']
     }
 }
@@ -91,4 +90,9 @@ rule alb_journaux when %alb !empty {
 let cles = Resources.*[ Type == 'AWS::KMS::Key' ]
 rule rotation_kms when %cles !empty {
     %cles.Properties.EnableKeyRotation == true
+}
+
+# 7. Un ecouteur HTTP n'est admis que sur le port 80 (origine CloudFront, ADR-005)
+rule ecouteur_http_origine_seulement when %ecouteurs !empty {
+    %ecouteurs[ Properties.Protocol == 'HTTP' ].Properties.Port == 80
 }
