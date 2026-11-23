@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 12 - Supervision : topic SNS, alarmes a seuils documentes (5xx, latence p95/p99,
+  cibles en echec), filtre de metrique sur les journaux JSON, tableau de bord par domaine.
+
+Parameters:
+  Environnement:
+    Type: String
+    AllowedValues: [dev, prod]
+  Equipe:
+    Type: String
+    Default: bkay
+  EmailAlertes:
+    Type: String
+  AlbDimension:
+    Type: String
+  TgWebDimension:
+    Type: String
+  GroupeJournauxApp:
+    Type: String
+
+Resources:
+  TopicExploitation:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "sns-exploitation-leman-${Environnement}-${Equipe}"
+      Subscription:
+        - {Protocol: email, Endpoint: !Ref EmailAlertes}
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  # Runbook : docs/runbooks/alarme-5xx.md
+  Alarme5xx:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "alarm-5xx-portail-${Environnement}-${Equipe}"
+      AlarmDescription: "CRITIQUE - plus de 5 erreurs 5xx des cibles en 1 min. Runbook docs/runbooks/alarme-5xx.md"
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions: [{Name: LoadBalancer, Value: !Ref AlbDimension}]
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref TopicExploitation]
+      OKActions: [!Ref TopicExploitation]
+
+  # Runbook : docs/runbooks/alarme-latence.md
+  AlarmeLatenceP95:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "alarm-latence-p95-${Environnement}-${Equipe}"
+      AlarmDescription: "SLO - p95 TargetResponseTime > 500 ms sur 5 min. Runbook docs/runbooks/alarme-latence.md"
+      Namespace: AWS/ApplicationELB
+      MetricName: TargetResponseTime
+      Dimensions: [{Name: LoadBalancer, Value: !Ref AlbDimension}]
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0.5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref TopicExploitation]
+
+  AlarmeLatenceP99:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "alarm-latence-p99-${Environnement}-${Equipe}"
+      AlarmDescription: "SLO - p99 TargetResponseTime > 1 s sur 5 min. Runbook docs/runbooks/alarme-latence.md"
+      Namespace: AWS/ApplicationELB
+      MetricName: TargetResponseTime
+      Dimensions: [{Name: LoadBalancer, Value: !Ref AlbDimension}]
+      ExtendedStatistic: p99
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref TopicExploitation]
+
+  # Runbook : docs/runbooks/alarme-cibles.md
+  AlarmeCiblesEnEchec:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "alarm-cibles-web-${Environnement}-${Equipe}"
+      AlarmDescription: "CRITIQUE - au moins une cible tg-web en echec 2 min. Runbook docs/runbooks/alarme-cibles.md"
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - {Name: LoadBalancer, Value: !Ref AlbDimension}
+        - {Name: TargetGroup, Value: !Ref TgWebDimension}
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref TopicExploitation]
+      OKActions: [!Ref TopicExploitation]
+
+  FiltreErreursApp:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref GroupeJournauxApp
+      FilterPattern: "{ $.statut >= 500 }"
+      MetricTransformations:
+        - {MetricNamespace: !Sub "Leman/${Equipe}", MetricName: !Sub "ErreursApp-${Environnement}", MetricValue: "1", DefaultValue: 0}
+
+  TableauDeBord:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "db-portail-leman-${Environnement}-${Equipe}"
+      DashboardBody: !Sub |
+        {"widgets":[
+         {"type":"text","x":0,"y":0,"width":24,"height":1,"properties":{"markdown":"## Performance - ALB ${Environnement}"}},
+         {"type":"metric","x":0,"y":1,"width":12,"height":6,"properties":{"title":"Latence cibles p95 / p99 (s)","region":"${AWS::Region}","view":"timeSeries",
+           "metrics":[["AWS/ApplicationELB","TargetResponseTime","LoadBalancer","${AlbDimension}",{"stat":"p95"}],["...",{"stat":"p99"}]],
+           "annotations":{"horizontal":[{"label":"SLO p95","value":0.5},{"label":"SLO p99","value":1}]}}},
+         {"type":"metric","x":12,"y":1,"width":12,"height":6,"properties":{"title":"Requetes et erreurs 5xx","region":"${AWS::Region}","view":"timeSeries","stat":"Sum",
+           "metrics":[["AWS/ApplicationELB","RequestCount","LoadBalancer","${AlbDimension}"],[".","HTTPCode_Target_5XX_Count",".","."],[".","HTTPCode_ELB_5XX_Count",".","."]]}},
+         {"type":"text","x":0,"y":7,"width":24,"height":1,"properties":{"markdown":"## Connectivite et disponibilite"}},
+         {"type":"metric","x":0,"y":8,"width":12,"height":6,"properties":{"title":"Cibles saines / en echec (tg-web)","region":"${AWS::Region}","view":"timeSeries","stat":"Maximum",
+           "metrics":[["AWS/ApplicationELB","HealthyHostCount","TargetGroup","${TgWebDimension}","LoadBalancer","${AlbDimension}"],[".","UnHealthyHostCount",".",".",".","."]]}},
+         {"type":"text","x":0,"y":14,"width":24,"height":1,"properties":{"markdown":"## Securite et application"}},
+         {"type":"metric","x":0,"y":15,"width":12,"height":6,"properties":{"title":"Erreurs applicatives (journaux JSON)","region":"${AWS::Region}","view":"timeSeries","stat":"Sum",
+           "metrics":[["Leman/${Equipe}","ErreursApp-${Environnement}"]]}},
+         {"type":"alarm","x":12,"y":15,"width":12,"height":6,"properties":{"title":"Etat des alarmes","alarms":["${Alarme5xx.Arn}","${AlarmeLatenceP95.Arn}","${AlarmeLatenceP99.Arn}","${AlarmeCiblesEnEchec.Arn}"]}}
+        ]}
+
+Outputs:
+  TopicArn:
+    Value: !Ref TopicExploitation

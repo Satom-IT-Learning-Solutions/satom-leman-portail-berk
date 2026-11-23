@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Calcul - web-01 et app-01 en sous-reseaux prives (IMDSv2, EBS chiffre, aucune cle SSH),
+  dev-01 en environnement dev. Code applicatif tire du bucket d'artefacts versionne.
+
+Parameters:
+  Environnement:
+    Type: String
+    AllowedValues: [dev, prod]
+  Equipe:
+    Type: String
+    Default: bkay
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: AMI Amazon Linux 2023 figee (voir ADR-004)
+  TypeInstance:
+    Type: String
+    Default: t3.micro
+  SubPrive1a:
+    Type: AWS::EC2::Subnet::Id
+  SubPrive1b:
+    Type: AWS::EC2::Subnet::Id
+  SubPublic1a:
+    Type: AWS::EC2::Subnet::Id
+  SgWeb:
+    Type: AWS::EC2::SecurityGroup::Id
+  SgApp:
+    Type: AWS::EC2::SecurityGroup::Id
+  IpWeb:
+    Type: String
+  IpApp:
+    Type: String
+  IpDev:
+    Type: String
+    Default: ""
+  BucketArtefacts:
+    Type: String
+  VersionApp:
+    Type: String
+    Description: Identifiant de commit du code applicatif (chemin app/<version>/portail.py)
+
+Conditions:
+  AvecDev01: !And [!Equals [!Ref Environnement, dev], !Not [!Equals [!Ref IpDev, ""]]]
+
+Resources:
+  RoleInstance:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy"
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AWSXrayWriteOnlyAccess"
+      Policies:
+        - PolicyName: lecture-artefacts
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${BucketArtefacts}/app/*"
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  ProfilInstance:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref RoleInstance]
+
+  GroupeJournauxApp:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/leman-${Equipe}/${Environnement}/portail"
+      RetentionInDays: 7
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  ModeleLancement:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "lt-portail-${Environnement}-${Equipe}"
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref TypeInstance
+        IamInstanceProfile: {Arn: !GetAtt ProfilInstance.Arn}
+        MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled, HttpPutResponseHopLimit: 1}
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs: {VolumeSize: 8, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+        Monitoring: {Enabled: true}
+
+  WebInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate: {LaunchTemplateId: !Ref ModeleLancement, Version: !GetAtt ModeleLancement.LatestVersionNumber}
+      SubnetId: !Ref SubPrive1a
+      PrivateIpAddress: !Ref IpWeb
+      SecurityGroupIds: [!Ref SgWeb]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          mkdir -p /opt/portail /var/log/portail
+          aws s3 cp "s3://${BucketArtefacts}/app/${VersionApp}/portail.py" /opt/portail/portail.py --region ${AWS::Region}
+          cat > /etc/systemd/system/portail.service <<'EOF'
+          [Unit]
+          Description=Portail Leman (web)
+          After=network-online.target
+          [Service]
+          Environment=PORTAIL_ROLE=web PORTAIL_ENV=${Environnement} PORTAIL_VERSION=${VersionApp}
+          ExecStart=/usr/bin/python3 /opt/portail/portail.py
+          Restart=always
+          StandardOutput=append:/var/log/portail/portail.log
+          StandardError=append:/var/log/portail/portail.log
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          systemctl daemon-reload && systemctl enable --now portail
+          dnf install -y -q amazon-cloudwatch-agent || true
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'EOF'
+          {"logs":{"logs_collected":{"files":{"collect_list":[{"file_path":"/var/log/portail/portail.log","log_group_name":"${GroupeJournauxApp}","log_stream_name":"web-01-{instance_id}"}]}}}}
+          EOF
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json || true
+      Tags:
+        - {Key: Name, Value: !Sub "web-01-${Environnement}-${Equipe}"}
+        - {Key: Role, Value: web}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate: {LaunchTemplateId: !Ref ModeleLancement, Version: !GetAtt ModeleLancement.LatestVersionNumber}
+      SubnetId: !Ref SubPrive1b
+      PrivateIpAddress: !Ref IpApp
+      SecurityGroupIds: [!Ref SgApp]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          mkdir -p /opt/portail /var/log/portail
+          aws s3 cp "s3://${BucketArtefacts}/app/${VersionApp}/portail.py" /opt/portail/portail.py --region ${AWS::Region}
+          cat > /etc/systemd/system/portail.service <<'EOF'
+          [Unit]
+          Description=Portail Leman (api)
+          After=network-online.target
+          [Service]
+          Environment=PORTAIL_ROLE=api PORTAIL_ENV=${Environnement} PORTAIL_VERSION=${VersionApp}
+          ExecStart=/usr/bin/python3 /opt/portail/portail.py
+          Restart=always
+          StandardOutput=append:/var/log/portail/portail.log
+          StandardError=append:/var/log/portail/portail.log
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          systemctl daemon-reload && systemctl enable --now portail
+          dnf install -y -q amazon-cloudwatch-agent || true
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'EOF'
+          {"logs":{"logs_collected":{"files":{"collect_list":[{"file_path":"/var/log/portail/portail.log","log_group_name":"${GroupeJournauxApp}","log_stream_name":"app-01-{instance_id}"}]}}}}
+          EOF
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json || true
+      Tags:
+        - {Key: Name, Value: !Sub "app-01-${Environnement}-${Equipe}"}
+        - {Key: Role, Value: api}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Dev01Instance:
+    Type: AWS::EC2::Instance
+    Condition: AvecDev01
+    Properties:
+      LaunchTemplate: {LaunchTemplateId: !Ref ModeleLancement, Version: !GetAtt ModeleLancement.LatestVersionNumber}
+      SubnetId: !Ref SubPublic1a
+      PrivateIpAddress: !Ref IpDev
+      SecurityGroupIds: [!Ref SgWeb]
+      Tags:
+        - {Key: Name, Value: !Sub "dev-01-${Equipe}"}
+        - {Key: Role, Value: poste-dev}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+Outputs:
+  WebInstanceId:
+    Value: !Ref WebInstance
+  AppInstanceId:
+    Value: !Ref AppInstance
+  GroupeJournauxApp:
+    Value: !Ref GroupeJournauxApp

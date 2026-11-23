@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 3 - Security Groups du portail. Aucun port d'administration (22, 3389) ouvert :
+  l'administration passe par AWS Systems Manager Session Manager.
+
+Parameters:
+  Environnement:
+    Type: String
+    AllowedValues: [dev, prod]
+  Equipe:
+    Type: String
+    Default: bkay
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  ListePrefixesCloudFront:
+    Type: String
+    AllowedPattern: '^pl-[0-9a-f]+$'
+    Description: Liste geree com.amazonaws.global.cloudfront.origin-facing de la region
+  CidrHomologue:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^10\.[0-9]{1,3}\.0\.0/16$'
+    Description: CIDR du VPC homologue (peering / TGW) autorise vers app-01:8080, vide sinon
+
+Conditions:
+  AvecHomologue: !Not [!Equals [!Ref CidrHomologue, ""]]
+
+Resources:
+  SgAlb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "sg-alb-${Environnement}-${Equipe}"
+      GroupDescription: ALB du portail - HTTPS uniquement depuis CloudFront
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourcePrefixListId: !Ref ListePrefixesCloudFront
+          Description: HTTPS depuis CloudFront (origin-facing)
+      Tags:
+        - {Key: Name, Value: !Sub "sg-alb-${Environnement}-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  SgWeb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "sg-web-${Environnement}-${Equipe}"
+      GroupDescription: web-01 - HTTP 80 depuis l ALB uniquement
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref SgAlb
+          Description: HTTP depuis l ALB
+      SecurityGroupEgress:
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS sortant S3 SSM paquets}
+        - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: 10.0.0.0/8, Description: API interne}
+        - {IpProtocol: udp, FromPort: 123, ToPort: 123, CidrIp: 169.254.169.123/32, Description: NTP Amazon}
+      Tags:
+        - {Key: Name, Value: !Sub "sg-web-${Environnement}-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  SgApp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "sg-app-${Environnement}-${Equipe}"
+      GroupDescription: app-01 - API 8080 depuis sg-web et l ALB (regle /api/*) uniquement
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, SourceSecurityGroupId: !Ref SgWeb, Description: API depuis web-01}
+        - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, SourceSecurityGroupId: !Ref SgAlb, Description: API depuis l ALB - voir ADR-003}
+      SecurityGroupEgress:
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS sortant S3 SSM paquets}
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP sortant (depots de paquets)}
+        - {IpProtocol: udp, FromPort: 123, ToPort: 123, CidrIp: 169.254.169.123/32, Description: NTP Amazon}
+      Tags:
+        - {Key: Name, Value: !Sub "sg-app-${Environnement}-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  SgAppDepuisHomologue:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: AvecHomologue
+    Properties:
+      GroupId: !Ref SgApp
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref CidrHomologue
+      Description: API depuis le VPC homologue (dev-01) - sprint 5
+
+Outputs:
+  SgAlb:
+    Value: !Ref SgAlb
+  SgWeb:
+    Value: !Ref SgWeb
+  SgApp:
+    Value: !Ref SgApp

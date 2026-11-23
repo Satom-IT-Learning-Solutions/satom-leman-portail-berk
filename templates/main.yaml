@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Pile racine du portail Groupe Leman Finance SA (stack-leman-dev / stack-leman-prod).
+  Assemble les templates par domaine en piles imbriquees. Memes templates pour dev et prod,
+  seuls les fichiers parameters/<env>.json different.
+
+Parameters:
+  Environnement:
+    Type: String
+    AllowedValues: [dev, prod]
+  Equipe:
+    Type: String
+    Default: bkay
+  CidrVpc:
+    Type: String
+  ActiverNat:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ListePrefixesCloudFront:
+    Type: String
+  CidrHomologue:
+    Type: String
+    Default: ""
+  AmiId:
+    Type: AWS::EC2::Image::Id
+  IpWeb:
+    Type: String
+  IpApp:
+    Type: String
+  IpDev:
+    Type: String
+    Default: ""
+  BucketArtefacts:
+    Type: String
+  VersionApp:
+    Type: String
+  CertificatAlbArn:
+    Type: String
+  EmailAlertes:
+    Type: String
+    Default: berk.kaymaz@git.swiss
+
+Resources:
+  Reseau:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./01-reseau.yaml
+      Parameters:
+        Environnement: !Ref Environnement
+        Equipe: !Ref Equipe
+        CidrVpc: !Ref CidrVpc
+        ActiverNat: !Ref ActiverNat
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Securite:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./02-securite.yaml
+      Parameters:
+        Environnement: !Ref Environnement
+        Equipe: !Ref Equipe
+        VpcId: !GetAtt Reseau.Outputs.VpcId
+        ListePrefixesCloudFront: !Ref ListePrefixesCloudFront
+        CidrHomologue: !Ref CidrHomologue
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Calcul:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./03-calcul.yaml
+      Parameters:
+        Environnement: !Ref Environnement
+        Equipe: !Ref Equipe
+        AmiId: !Ref AmiId
+        SubPrive1a: !GetAtt Reseau.Outputs.SubPrive1a
+        SubPrive1b: !GetAtt Reseau.Outputs.SubPrive1b
+        SubPublic1a: !GetAtt Reseau.Outputs.SubPublic1a
+        SgWeb: !GetAtt Securite.Outputs.SgWeb
+        SgApp: !GetAtt Securite.Outputs.SgApp
+        IpWeb: !Ref IpWeb
+        IpApp: !Ref IpApp
+        IpDev: !Ref IpDev
+        BucketArtefacts: !Ref BucketArtefacts
+        VersionApp: !Ref VersionApp
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Equilibrage:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./04-alb.yaml
+      Parameters:
+        Environnement: !Ref Environnement
+        Equipe: !Ref Equipe
+        VpcId: !GetAtt Reseau.Outputs.VpcId
+        SubPublic1a: !GetAtt Reseau.Outputs.SubPublic1a
+        SubPublic1b: !GetAtt Reseau.Outputs.SubPublic1b
+        SgAlb: !GetAtt Securite.Outputs.SgAlb
+        WebInstanceId: !GetAtt Calcul.Outputs.WebInstanceId
+        AppInstanceId: !GetAtt Calcul.Outputs.AppInstanceId
+        CertificatAlbArn: !Ref CertificatAlbArn
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Supervision:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./05-supervision.yaml
+      Parameters:
+        Environnement: !Ref Environnement
+        Equipe: !Ref Equipe
+        EmailAlertes: !Ref EmailAlertes
+        AlbDimension: !GetAtt Equilibrage.Outputs.AlbDimension
+        TgWebDimension: !GetAtt Equilibrage.Outputs.TgWebDimension
+        GroupeJournauxApp: !GetAtt Calcul.Outputs.GroupeJournauxApp
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+Outputs:
+  VpcId:
+    Value: !GetAtt Reseau.Outputs.VpcId
+  RtPrivee:
+    Value: !GetAtt Reseau.Outputs.RtPrivee
+  AlbDns:
+    Value: !GetAtt Equilibrage.Outputs.AlbDns
+  AlbZoneId:
+    Value: !GetAtt Equilibrage.Outputs.AlbZoneId
+  WebInstanceId:
+    Value: !GetAtt Calcul.Outputs.WebInstanceId
+  AppInstanceId:
+    Value: !GetAtt Calcul.Outputs.AppInstanceId

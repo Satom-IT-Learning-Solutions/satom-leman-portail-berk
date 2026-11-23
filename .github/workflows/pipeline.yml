@@ -1,0 +1,200 @@
+name: pipeline-devsecops
+
+# Sept etapes (section 2.1 de l'enonce). Authentification AWS par OIDC uniquement :
+# aucune cle d'acces longue duree, aucun secret AWS dans le depot.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-2
+  ROLE_DEPLOIEMENT: arn:aws:iam::223310160799:role/leman-github-deploy-bkay
+
+jobs:
+  # ---------------------------------------------------------------- 1. Qualite
+  qualite:
+    name: 1 - Qualite de code
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Outils
+        run: pip install cfn-lint==1.* ruff pytest pytest-cov
+      - name: cfn-lint (templates)
+        run: cfn-lint
+      - name: ruff (lint et format)
+        run: ruff check app scripts && ruff format --check app scripts
+      - name: shellcheck (scripts Bash)
+        run: shellcheck scripts/*.sh tests/connectivity/*.sh
+      - name: Tests unitaires et couverture
+        run: python -m pytest --cov --cov-report=xml:coverage.xml --cov-report=term
+      - uses: actions/upload-artifact@v4
+        with: {name: couverture, path: coverage.xml}
+      - name: Analyse SonarQube Cloud et quality gate
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          args: -Dsonar.qualitygate.wait=true
+
+  # ------------------------------------------------------- 2. Securite statique
+  securite-statique:
+    name: 2 - Securite statique
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: cfn-guard (regles du portail)
+        run: |
+          curl -sSL -o guard.tgz https://github.com/aws-cloudformation/cloudformation-guard/releases/download/3.1.2/cfn-guard-v3-x86_64-ubuntu-latest.tar.gz
+          tar xzf guard.tgz && GUARD=cfn-guard-v3-x86_64-ubuntu-latest/cfn-guard
+          $GUARD validate -d templates/ -d bootstrap/ -r policies/guard/portail.guard --show-summary fail
+          # Test de non-regression : un SG avec SSH ouvert au monde DOIT etre refuse
+          if $GUARD validate -d tests/guard/sg-ssh-ouvert.yaml -r policies/guard/portail.guard --show-summary none; then
+            echo "La regle ports_admin_fermes n'a pas bloque le cas negatif"; exit 1; fi
+          echo "Cas negatif correctement refuse"
+      - name: checkov (IaC et workflows)
+        run: |
+          pip install checkov
+          checkov -d . --config-file policies/checkov/.checkov.yaml
+      - name: Semgrep (SAST)
+        run: |
+          pip install semgrep
+          semgrep scan --config p/python --config p/secrets --severity ERROR --error app scripts
+      - name: gitleaks (secrets, tout l'historique)
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact --verbose --exit-code 1 .
+      - name: Trivy (dependances et configuration)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Controle des CIDR (sprint 5)
+        run: python scripts/verifier_cidr.py parameters
+
+  # -------------------------------------------------------- 3. SBOM
+  construction-sbom:
+    name: 3 - Construction et SBOM
+    runs-on: ubuntu-latest
+    needs: [qualite, securite-statique]
+    steps:
+      - uses: actions/checkout@v4
+      - name: SBOM CycloneDX (Syft)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom/sbom-${{ github.sha }}.cdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@v4
+        with: {name: sbom, path: sbom/}
+
+  # -------------------------------------------------------- 4. Deploiement dev
+  deploiement-dev:
+    name: 4 - Deploiement dev (change set)
+    runs-on: ubuntu-latest
+    needs: construction-sbom
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Change set stack-leman-dev
+        run: scripts/deployer.sh dev --auto
+
+  # ------------------------------------------- 5. Tests dynamiques et performance
+  tests-dynamiques:
+    name: 5 - Tests dynamiques, DAST et charge
+    runs-on: ubuntu-latest
+    needs: deploiement-dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Connectivite (cibles ALB saines)
+        run: tests/connectivity/cibles_saines.sh stack-leman-dev
+      - name: Cible du test (point d'entree public)
+        id: cible
+        run: echo "url=$(tests/connectivity/url_publique.sh dev)" >> "$GITHUB_OUTPUT"
+      - name: Charge k6 et verification des SLO
+        if: steps.cible.outputs.url != ''
+        uses: grafana/run-k6-action@v1
+        env:
+          CIBLE: ${{ steps.cible.outputs.url }}
+        with:
+          path: tests/load/charge.js
+      - name: OWASP ZAP baseline (DAST)
+        if: steps.cible.outputs.url != ''
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ steps.cible.outputs.url }}
+          rules_file_name: tests/dast/zap-regles.tsv
+          fail_action: true
+          allow_issue_writing: false
+
+  # ------------------------------------------ 6. Validation manuelle puis prod
+  deploiement-prod:
+    name: 6 - Validation manuelle et deploiement prod
+    runs-on: ubuntu-latest
+    needs: tests-dynamiques
+    if: github.ref == 'refs/heads/main'
+    environment: prod   # relecteur obligatoire configure sur l'environnement GitHub
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Change set stack-leman-prod
+        run: scripts/deployer.sh prod --auto
+
+  # --------------------------------------------------- 7. Post-deploiement
+  post-deploiement:
+    name: 7 - Post-deploiement (alarmes, conformite)
+    runs-on: ubuntu-latest
+    needs: deploiement-prod
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Alarmes et conformite
+        run: tests/connectivity/post_deploiement.sh prod

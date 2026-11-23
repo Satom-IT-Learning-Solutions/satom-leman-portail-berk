@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "S", "N", "UP", "A"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/tests/*" = ["S101", "S310"]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
+
+[tool.coverage.run]
+source = ["app", "scripts"]
+omit = ["app/tests/*"]

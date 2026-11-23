@@ -1,0 +1,241 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Gate G0 - Socle de la pipeline : federation OIDC GitHub, role de deploiement au moindre
+  privilege, role d'execution CloudFormation, bucket d'artefacts chiffre, budget et alerte.
+  Deploye une seule fois a la main (amorcage), puis gere par change set.
+
+Parameters:
+  Equipe:
+    Type: String
+    Default: bkay
+  DepotGithub:
+    Type: String
+    Default: Satom-IT-Learning-Solutions/satom-leman-portail-berk
+  CreerFournisseurOidc:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: false si le fournisseur token.actions.githubusercontent.com existe deja dans le compte
+  EmailAlertes:
+    Type: String
+    Default: berk.kaymaz@git.swiss
+  BudgetMensuel:
+    Type: Number
+    Default: 150
+    Description: Montant du budget (150 CHF demandes, le service Budgets compte en USD - voir ADR-006)
+
+Conditions:
+  AvecOidc: !Equals [!Ref CreerFournisseurOidc, "true"]
+
+Resources:
+  FournisseurOidc:
+    Type: AWS::IAM::OIDCProvider
+    Condition: AvecOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  BucketArtefacts:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "leman-artefacts-${Equipe}-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: aws:kms}
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      VersioningConfiguration: {Status: Enabled}
+      LifecycleConfiguration:
+        Rules:
+          - {Id: expiration-90j, Status: Enabled, ExpirationInDays: 90, NoncurrentVersionExpiration: {NoncurrentDays: 7}}
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  PolitiqueBucketArtefacts:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketArtefacts
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TlsObligatoire
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource: [!GetAtt BucketArtefacts.Arn, !Sub "${BucketArtefacts.Arn}/*"]
+            Condition: {Bool: {aws:SecureTransport: "false"}}
+
+  # Role d'execution : seul CloudFormation peut l'endosser (le role GitHub ne cree rien directement)
+  RoleExecutionCfn:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "leman-cfn-execution-${Equipe}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: cloudformation.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref AWS::AccountId}
+      Policies:
+        - PolicyName: ressources-du-portail
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ServicesDuPortail
+                Effect: Allow
+                Action:
+                  - ec2:*
+                  - elasticloadbalancing:*
+                  - logs:*
+                  - cloudwatch:*
+                  - sns:*
+                  - route53:*
+                  - cloudfront:*
+                  - wafv2:*
+                  - network-firewall:*
+                  - synthetics:*
+                  - acm:DescribeCertificate
+                  - acm:ListCertificates
+                  - ssm:GetParameters
+                  - xray:*
+                  - config:PutConfigRule
+                  - config:DeleteConfigRule
+                  - config:DescribeConfigRules
+                  - config:TagResource
+                  - config:UntagResource
+                  - lambda:*
+                Resource: "*"
+                Condition:
+                  StringEquals: {aws:RequestedRegion: [eu-central-2, us-east-1]}
+              - Sid: KmsDesJournaux
+                Effect: Allow
+                Action: [kms:CreateKey, kms:CreateAlias, kms:DeleteAlias, kms:DescribeKey, kms:EnableKeyRotation,
+                         kms:GetKeyPolicy, kms:PutKeyPolicy, kms:GetKeyRotationStatus, kms:ScheduleKeyDeletion,
+                         kms:TagResource, kms:UntagResource, kms:ListResourceTags, kms:UpdateAlias]
+                Resource: "*"
+              - Sid: BucketsDuPortail
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::leman-*-${Equipe}-*"
+                  - !Sub "arn:${AWS::Partition}:s3:::leman-*-${Equipe}-*/*"
+              - Sid: RolesDesPiles
+                Effect: Allow
+                Action: [iam:CreateRole, iam:DeleteRole, iam:GetRole, iam:PassRole, iam:TagRole, iam:UntagRole,
+                         iam:PutRolePolicy, iam:DeleteRolePolicy, iam:GetRolePolicy, iam:AttachRolePolicy,
+                         iam:DetachRolePolicy, iam:UpdateAssumeRolePolicy, iam:CreateInstanceProfile,
+                         iam:DeleteInstanceProfile, iam:GetInstanceProfile, iam:AddRoleToInstanceProfile,
+                         iam:RemoveRoleFromInstanceProfile, iam:TagInstanceProfile, iam:CreateServiceLinkedRole]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/stack-leman-*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/stack-leman-*"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/*"
+              - Sid: LectureArtefacts
+                Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub "${BucketArtefacts.Arn}/*"
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  # Role endosse par GitHub Actions via OIDC : pilote CloudFormation et lit l'etat, rien de plus
+  RoleDeploiementGithub:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "leman-github-deploy-${Equipe}"
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${DepotGithub}:ref:refs/heads/main"
+                  - !Sub "repo:${DepotGithub}:pull_request"
+                  - !Sub "repo:${DepotGithub}:environment:dev"
+                  - !Sub "repo:${DepotGithub}:environment:prod"
+      Policies:
+        - PolicyName: pilotage-cloudformation
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: PilesDuPortail
+                Effect: Allow
+                Action: [cloudformation:CreateStack, cloudformation:UpdateStack, cloudformation:DeleteStack,
+                         cloudformation:CreateChangeSet, cloudformation:DescribeChangeSet, cloudformation:ExecuteChangeSet,
+                         cloudformation:DeleteChangeSet, cloudformation:ListChangeSets, cloudformation:DescribeStacks,
+                         cloudformation:DescribeStackEvents, cloudformation:DescribeStackResources,
+                         cloudformation:GetTemplate, cloudformation:DetectStackDrift,
+                         cloudformation:DescribeStackResourceDrifts, cloudformation:TagResource]
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/stack-leman-*"
+              - Sid: Validation
+                Effect: Allow
+                Action: [cloudformation:ValidateTemplate, cloudformation:DescribeStackDriftDetectionStatus]
+                Resource: "*"
+              - Sid: PasserLeRoleExecution
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt RoleExecutionCfn.Arn
+                Condition:
+                  StringEquals: {iam:PassedToService: cloudformation.amazonaws.com}
+              - Sid: Artefacts
+                Effect: Allow
+                Action: [s3:PutObject, s3:GetObject, s3:ListBucket]
+                Resource: [!GetAtt BucketArtefacts.Arn, !Sub "${BucketArtefacts.Arn}/*"]
+              - Sid: LectureEtMesures
+                Effect: Allow
+                Action: [ec2:Describe*, elasticloadbalancing:Describe*, cloudwatch:GetMetricData,
+                         cloudwatch:DescribeAlarms, ec2:DescribeManagedPrefixLists, ssm:GetParameter,
+                         securityhub:GetFindings, config:DescribeComplianceByConfigRule, acm:ListCertificates]
+                Resource: "*"
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "budget-tp-final-${Equipe}"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: {Amount: !Ref BudgetMensuel, Unit: USD}
+        CostFilters:
+          TagKeyValue: [!Sub "user:Equipe$${Equipe}"]
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref EmailAlertes}]
+        - Notification: {NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref EmailAlertes}]
+
+Outputs:
+  RoleDeploiementArn:
+    Value: !GetAtt RoleDeploiementGithub.Arn
+  RoleExecutionArn:
+    Value: !GetAtt RoleExecutionCfn.Arn
+  BucketArtefacts:
+    Value: !Ref BucketArtefacts

@@ -1,0 +1,12 @@
+{
+  "Environnement": "dev",
+  "Equipe": "bkay",
+  "CidrVpc": "10.1.0.0/16",
+  "ActiverNat": "false",
+  "CidrHomologue": "",
+  "AmiId": "AMI_A_FIGER",
+  "IpWeb": "10.1.2.10",
+  "IpApp": "10.1.3.10",
+  "IpDev": "10.1.1.10",
+  "EmailAlertes": "berk.kaymaz@git.swiss"
+}

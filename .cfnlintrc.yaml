@@ -1,0 +1,5 @@
+templates:
+  - templates/*.yaml
+  - bootstrap/*.yaml
+ignore_checks:
+  - W3002   # TemplateURL relatives resolues par "aws cloudformation package"

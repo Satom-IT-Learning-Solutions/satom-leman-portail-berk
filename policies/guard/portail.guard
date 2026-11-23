@@ -1,0 +1,94 @@
+# Regles cfn-guard du portail Groupe Leman Finance SA (section 3.2 de l'enonce)
+
+let groupes_securite = Resources.*[ Type == 'AWS::EC2::SecurityGroup' ]
+let regles_entree   = Resources.*[ Type == 'AWS::EC2::SecurityGroupIngress' ]
+
+# 1. Aucun port d'administration (22 SSH, 3389 RDP) ouvert a 0.0.0.0/0 ou ::/0
+rule ports_admin_fermes_sg when %groupes_securite !empty {
+    %groupes_securite.Properties.SecurityGroupIngress[*] {
+        when CidrIp exists CidrIp is_string {
+            when CidrIp == '0.0.0.0/0' {
+                FromPort > 22 or ToPort < 22
+                <<SSH (22) ouvert a 0.0.0.0/0>>
+                FromPort > 3389 or ToPort < 3389
+                <<RDP (3389) ouvert a 0.0.0.0/0>>
+            }
+        }
+        when CidrIpv6 exists {
+            CidrIpv6 != '::/0'
+            <<Entree ouverte a ::/0 interdite>>
+        }
+    }
+}
+
+rule ports_admin_fermes_regles when %regles_entree !empty {
+    %regles_entree.Properties {
+        when CidrIp exists CidrIp is_string {
+            CidrIp != '0.0.0.0/0'
+            <<Regle d'entree isolee ouverte a 0.0.0.0/0>>
+        }
+    }
+}
+
+# 2. Sous-reseaux prives : la route par defaut ne passe jamais par l'Internet Gateway
+let routes = Resources.*[ Type == 'AWS::EC2::Route' ]
+rule route_privee_jamais_vers_igw when %routes !empty {
+    %routes[ Properties.RouteTableId.Ref == 'RtPrivee' ] {
+        Properties.GatewayId not exists
+        <<La table privee ne doit pas router vers l'IGW>>
+    }
+}
+
+# 3. Pas d'IP publique automatique sur les sous-reseaux
+let sous_reseaux = Resources.*[ Type == 'AWS::EC2::Subnet' ]
+rule pas_ip_publique_auto when %sous_reseaux !empty {
+    %sous_reseaux.Properties {
+        MapPublicIpOnLaunch not exists or MapPublicIpOnLaunch == false
+    }
+}
+
+# 4. Chiffrement : journaux KMS, EBS chiffre, buckets chiffres et prives
+let groupes_journaux_flux = Resources.*[ Type == 'AWS::Logs::LogGroup' Properties.LogGroupName exists ]
+rule journaux_flux_kms when %groupes_journaux_flux !empty {
+    %groupes_journaux_flux[ Properties.LogGroupName.'Fn::Sub' == /vpc-flow/ ].Properties.KmsKeyId exists
+}
+
+let modeles = Resources.*[ Type == 'AWS::EC2::LaunchTemplate' ]
+rule ebs_chiffre when %modeles !empty {
+    %modeles.Properties.LaunchTemplateData.BlockDeviceMappings[*].Ebs.Encrypted == true
+    %modeles.Properties.LaunchTemplateData.MetadataOptions.HttpTokens == 'required'
+}
+
+let buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]
+rule buckets_chiffres_et_prives when %buckets !empty {
+    %buckets.Properties {
+        BucketEncryption exists
+        PublicAccessBlockConfiguration.BlockPublicAcls == true
+        PublicAccessBlockConfiguration.BlockPublicPolicy == true
+        PublicAccessBlockConfiguration.IgnorePublicAcls == true
+        PublicAccessBlockConfiguration.RestrictPublicBuckets == true
+    }
+}
+
+# 5. ALB : TLS 1.2 minimum et journaux d'acces actives
+let ecouteurs = Resources.*[ Type == 'AWS::ElasticLoadBalancingV2::Listener' ]
+rule ecouteur_tls12 when %ecouteurs !empty {
+    %ecouteurs.Properties {
+        Protocol == 'HTTPS'
+        SslPolicy in ['ELBSecurityPolicy-TLS13-1-2-2021-06', 'ELBSecurityPolicy-TLS-1-2-2017-01', 'ELBSecurityPolicy-TLS13-1-2-Res-2021-06']
+    }
+}
+
+let alb = Resources.*[ Type == 'AWS::ElasticLoadBalancingV2::LoadBalancer' ]
+rule alb_journaux when %alb !empty {
+    some %alb.Properties.LoadBalancerAttributes[*] {
+        Key == 'access_logs.s3.enabled'
+        Value == 'true'
+    }
+}
+
+# 6. KMS : rotation des cles activee
+let cles = Resources.*[ Type == 'AWS::KMS::Key' ]
+rule rotation_kms when %cles !empty {
+    %cles.Properties.EnableKeyRotation == true
+}

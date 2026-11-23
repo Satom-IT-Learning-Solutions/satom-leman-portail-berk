@@ -1,0 +1,19 @@
+# Configuration checkov - les exceptions sont justifiees dans docs/adr/
+framework:
+  - cloudformation
+  - github_actions
+compact: true
+quiet: true
+skip-check:
+  - CKV_AWS_18    # journaux d'acces S3 sur les buckets de journaux eux-memes (ADR-007)
+  - CKV_AWS_144   # replication inter-regions des buckets (hors perimetre, ADR-007)
+  - CKV_AWS_116   # DLQ Lambda (aucune Lambda applicative)
+  - CKV_AWS_117   # Lambda dans un VPC (aucune Lambda applicative)
+  - CKV_AWS_173   # chiffrement des variables Lambda
+  - CKV_AWS_26    # chiffrement KMS du topic SNS : incompatible avec les alarmes sans cle dediee (ADR-007)
+  - CKV_AWS_158   # groupe de journaux applicatif chiffre par defaut AWS (le groupe Flow Logs est en KMS)
+  - CKV_AWS_111   # politique d'execution CloudFormation (perimetre documente ADR-002)
+  - CKV_AWS_109   # idem
+  - CKV_AWS_108   # idem
+  - CKV_AWS_107   # idem
+  - CKV_AWS_110   # idem
