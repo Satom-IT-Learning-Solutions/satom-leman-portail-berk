@@ -35,9 +35,6 @@ Parameters:
     Default: ""
   BucketArtefacts:
     Type: String
-  VersionApp:
-    Type: String
-    Description: Identifiant de commit publie (trace) ; les instances lisent app/courant/ (ADR-013)
 
 Conditions:
   AvecDev01: !And [!Equals [!Ref Environnement, dev], !Not [!Equals [!Ref IpDev, ""]]]
@@ -133,7 +130,6 @@ Resources:
       Tags:
         - {Key: Name, Value: !Sub "web-01-${Environnement}-${Equipe}"}
         - {Key: Role, Value: web}
-        - {Key: VersionApp, Value: !Ref VersionApp}
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
         - {Key: Environnement, Value: !Ref Environnement}
@@ -173,7 +169,6 @@ Resources:
       Tags:
         - {Key: Name, Value: !Sub "app-01-${Environnement}-${Equipe}"}
         - {Key: Role, Value: api}
-        - {Key: VersionApp, Value: !Ref VersionApp}
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
         - {Key: Environnement, Value: !Ref Environnement}

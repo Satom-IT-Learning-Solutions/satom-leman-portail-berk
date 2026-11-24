@@ -88,7 +88,6 @@ Resources:
         IpApp: !Ref IpApp
         IpDev: !Ref IpDev
         BucketArtefacts: !Ref BucketArtefacts
-        VersionApp: !Ref VersionApp
       Tags:
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
@@ -130,6 +129,9 @@ Resources:
         - {Key: Environnement, Value: !Ref Environnement}
 
 Outputs:
+  VersionApp:
+    Description: Commit dont le code est publie sous app/courant/ (ADR-013)
+    Value: !Ref VersionApp
   VpcId:
     Value: !GetAtt Reseau.Outputs.VpcId
   RtPrivee:

@@ -85,7 +85,7 @@ DANGER=$(compter_dangers "$CS" "$PILE")
 for CS_IMBRIQUE in $(aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
     --query "Changes[?ResourceChange.ChangeSetId].ResourceChange.ChangeSetId" --output text); do
   aws cloudformation describe-change-set --region "$REGION" --change-set-name "$CS_IMBRIQUE" \
-    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' --output table
+    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement,join(`,`,Details[?Target.RequiresRecreation!=`Never`].Target.Name)]' --output table
   DANGER=$((DANGER + $(compter_dangers "$CS_IMBRIQUE")))
 done
 if [[ "$DANGER" != "0" && "${CONFIRMER_SUPPRESSION:-non}" != "oui" ]]; then
