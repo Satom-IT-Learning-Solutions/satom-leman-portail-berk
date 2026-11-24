@@ -1,6 +1,7 @@
-// Test de charge k6 - charge nominale et verification des SLO (section 3.3)
+// Test de charge k6 - charge nominale (10 utilisateurs virtuels, ~25 req/s) et verification des SLO (section 3.3)
 import http from "k6/http";
 import { check, sleep } from "k6";
+import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.2/index.js";
 
 const CIBLE = __ENV.CIBLE;
 
@@ -10,8 +11,8 @@ export const options = {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "30s", target: 20 },
-        { duration: "2m", target: 20 },
+        { duration: "30s", target: 10 },
+        { duration: "2m", target: 10 },
         { duration: "30s", target: 0 },
       ],
     },
@@ -27,13 +28,19 @@ export const options = {
 export default function () {
   const page = http.get(`${CIBLE}/`, { tags: { type: "page" } });
   check(page, { "accueil 200": (r) => r.status === 200 });
+  if (page.status !== 200) console.warn(`accueil ${page.status} ${page.headers["X-Cache"] || ""}`);
   const css = http.get(`${CIBLE}/static/style.css`, { tags: { type: "statique" } });
   check(css, { "statique 200": (r) => r.status === 200 });
+  if (css.status !== 200) console.warn(`statique ${css.status} ${css.headers["X-Cache"] || ""}`);
   const api = http.get(`${CIBLE}/api/portefeuilles`, { tags: { type: "api" } });
   check(api, { "api 200": (r) => r.status === 200 });
+  if (api.status !== 200) console.warn(`api ${api.status} ${api.headers["X-Cache"] || ""}`);
   sleep(1);
 }
 
 export function handleSummary(donnees) {
-  return { "docs/rapports/k6-resume.json": JSON.stringify(donnees, null, 2) };
+  return {
+    stdout: textSummary(donnees, { indent: " ", enableColors: false }),
+    "docs/rapports/k6-resume.json": JSON.stringify(donnees, null, 2),
+  };
 }

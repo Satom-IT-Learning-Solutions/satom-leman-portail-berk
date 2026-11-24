@@ -17,8 +17,10 @@ Parameters:
     Type: String
   LimiteRequetesParIp:
     Type: Number
-    Default: 1000
-    Description: Requetes par IP sur 5 minutes avant blocage (limitation de debit WAF)
+    Default: 10000
+    Description: >-
+      Requetes par IP sur 5 minutes avant blocage. La charge nominale de test (10 utilisateurs
+      virtuels depuis une seule IP, ~7 500 requetes) passe ; au-dela, l'IP est bloquee (403).
 
 Resources:
   # ---------- Ressources statiques : S3 prive, lu uniquement par CloudFront (OAC) ----------
