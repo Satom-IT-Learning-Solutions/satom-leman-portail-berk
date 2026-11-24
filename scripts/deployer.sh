@@ -29,6 +29,7 @@ trap 'diagnostic' ERR
 
 # 1. Artefact applicatif versionne
 aws s3 cp app/portail.py "s3://${BUCKET}/app/${VERSION}/portail.py" --region "$REGION" --only-show-errors
+aws s3 cp app/portail.py "s3://${BUCKET}/app/courant/portail.py" --region "$REGION" --only-show-errors
 
 # 2. Valeurs resolues dynamiquement (jamais de secret)
 PL_CF="$(aws ec2 describe-managed-prefix-lists --region "$REGION" \

@@ -37,7 +37,7 @@ Parameters:
     Type: String
   VersionApp:
     Type: String
-    Description: Identifiant de commit du code applicatif (chemin app/<version>/portail.py)
+    Description: Identifiant de commit publie (trace) ; les instances lisent app/courant/ (ADR-013)
 
 Conditions:
   AvecDev01: !And [!Equals [!Ref Environnement, dev], !Not [!Equals [!Ref IpDev, ""]]]
@@ -110,13 +110,13 @@ Resources:
           #!/bin/bash
           set -euo pipefail
           mkdir -p /opt/portail /var/log/portail
-          aws s3 cp "s3://${BucketArtefacts}/app/${VersionApp}/portail.py" /opt/portail/portail.py --region ${AWS::Region}
+          aws s3 cp "s3://${BucketArtefacts}/app/courant/portail.py" /opt/portail/portail.py --region ${AWS::Region}
           cat > /etc/systemd/system/portail.service <<'EOF'
           [Unit]
           Description=Portail Leman (web)
           After=network-online.target
           [Service]
-          Environment=PORTAIL_ROLE=web PORTAIL_ENV=${Environnement} PORTAIL_VERSION=${VersionApp}
+          Environment=PORTAIL_ROLE=web PORTAIL_ENV=${Environnement}
           ExecStart=/usr/bin/python3 /opt/portail/portail.py
           Restart=always
           StandardOutput=append:/var/log/portail/portail.log
@@ -133,6 +133,7 @@ Resources:
       Tags:
         - {Key: Name, Value: !Sub "web-01-${Environnement}-${Equipe}"}
         - {Key: Role, Value: web}
+        - {Key: VersionApp, Value: !Ref VersionApp}
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
         - {Key: Environnement, Value: !Ref Environnement}
@@ -149,13 +150,13 @@ Resources:
           #!/bin/bash
           set -euo pipefail
           mkdir -p /opt/portail /var/log/portail
-          aws s3 cp "s3://${BucketArtefacts}/app/${VersionApp}/portail.py" /opt/portail/portail.py --region ${AWS::Region}
+          aws s3 cp "s3://${BucketArtefacts}/app/courant/portail.py" /opt/portail/portail.py --region ${AWS::Region}
           cat > /etc/systemd/system/portail.service <<'EOF'
           [Unit]
           Description=Portail Leman (api)
           After=network-online.target
           [Service]
-          Environment=PORTAIL_ROLE=api PORTAIL_ENV=${Environnement} PORTAIL_VERSION=${VersionApp}
+          Environment=PORTAIL_ROLE=api PORTAIL_ENV=${Environnement}
           ExecStart=/usr/bin/python3 /opt/portail/portail.py
           Restart=always
           StandardOutput=append:/var/log/portail/portail.log
@@ -172,6 +173,7 @@ Resources:
       Tags:
         - {Key: Name, Value: !Sub "app-01-${Environnement}-${Equipe}"}
         - {Key: Role, Value: api}
+        - {Key: VersionApp, Value: !Ref VersionApp}
         - {Key: Projet, Value: SatomCloudNetwork}
         - {Key: Equipe, Value: !Ref Equipe}
         - {Key: Environnement, Value: !Ref Environnement}
