@@ -49,3 +49,9 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Le filtre ChangeSource ne suffit pas non plus (les memes proprietes portent aussi `DirectModification`). Decision ADR-014 : blocage des suppressions et des remplacements a la racine, detail imbrique affiche pour relecture.
 - Pile edge : `aws cloudformation deploy` appelle `GetTemplateSummary`, non accorde au role de pipeline. Plutot que d'elargir le role, la meme fonction de change set (avec garde-fou) applique la pile racine et la pile edge.
 - Etape 5 : seuil k6 `http_req_failed` depasse. Cause : la regle WAF de limitation de debit (1 000 requetes / 5 min / IP) bloquait le test de charge (20 utilisateurs virtuels depuis une seule IP) ; la protection fonctionne. Charge nominale fixee a 10 utilisateurs virtuels, limite WAF a 10 000 / 5 min / IP ; resume k6 affiche dans le journal de la pipeline.
+
+### 24/11/2026 - Sprint 11 et etape 5 verte
+- Pipeline complete jusqu'a l'etape 5 : dev a jour, `stack-leman-dev-edge` (CloudFront, OAC, WAF regional) appliquee par change set.
+- Charge (k6, 10 VU, 3 min) : 3 573 requetes, 0 % d'erreur, p95 209 ms, p99 234 ms (rapport `docs/rapports/charge-dev-2026-11-24.md`).
+- DAST (ZAP baseline) : 64 regles passees, 0 alerte high, 4 avertissements analyses (`docs/rapports/dast-dev-2026-11-24.md`).
+- Etape 6 en attente de la validation manuelle de Berk (environnement GitHub `prod`).
