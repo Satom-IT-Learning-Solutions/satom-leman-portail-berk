@@ -37,3 +37,7 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Mesure sprint 3 : Reachability Analyzer web-01 -> app-01 tcp/8080 accessible (True), tcp/22 bloque (False, `ENI_SG_RULES_MISMATCH`).
 - Sprint 11 prepare : pile `stack-leman-<env>-edge` (CloudFront, /static/* depuis S3 avec OAC, /api/* sans cache, en-tetes de securite, WAF regional). Derogations checkov documentees dans les templates (ADR-005, ADR-011, ADR-012).
 - Mise a jour de dev en UPDATE_ROLLBACK_COMPLETE (sprint 11) : la modification de `GroupDescription` de sg-alb impose un **remplacement**, impossible avec un `GroupName` fixe (`AlreadyExists`). Le garde-fou du script ne voyait que la pile racine : il inspecte desormais aussi les change sets imbriques (`--include-nested-stacks`). Description d'origine retablie. Taux d'echec des changements du sprint : voir DORA.
+
+### 24/11/2026 - Garde-fou et reprise
+- Le garde-fou imbrique a bloque un deploiement : 6 remplacements annonces (instances, groupes cibles, filtre de metrique) causes par la version du code dans le UserData. Correction ADR-013 (UserData stable, `app/courant/`, balise `VersionApp`).
+- Plutot que de forcer le remplacement, dev est supprime puis recree depuis le depot : c'est aussi la mesure de reprise du sprint 13 (`scripts/supprimer.sh`, puis pipeline).
