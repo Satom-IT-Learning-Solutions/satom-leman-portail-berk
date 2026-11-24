@@ -143,6 +143,9 @@ jobs:
       - name: Cible du test (point d'entree public)
         id: cible
         run: echo "url=$(tests/connectivity/url_publique.sh dev)" >> "$GITHUB_OUTPUT"
+      - name: Installation de k6
+        if: steps.cible.outputs.url != ''
+        uses: grafana/setup-k6-action@v1
       - name: Charge k6 et verification des SLO
         if: steps.cible.outputs.url != ''
         uses: grafana/run-k6-action@v1
