@@ -1,0 +1,6 @@
+# ADR-014 - Garde-fou des change sets et piles imbriquees
+
+- **Statut** : accepte - 24/11/2026
+- **Contexte** : le 23/11, un changement de `GroupDescription` dans une pile imbriquee a impose le remplacement de sg-alb (rollback). Le script ne regardait que la pile racine. Avec `--include-nested-stacks`, les change sets imbriques annoncent a chaque deploiement le remplacement des instances, groupes cibles et filtres de metrique : les parametres issus des sorties d'autres piles imbriquees (`SubnetId`, `SecurityGroupIds`, `VpcId`, `LogGroupName`) sont reevalues et marques a la fois `ParameterReference` et `DirectModification`, meme quand leur valeur ne change pas. Trois filtres successifs (Replacement, Evaluation, ChangeSource) ne permettent pas de distinguer un vrai remplacement.
+- **Decision** : le script bloque toute suppression (racine et imbriquees) et tout remplacement annonce a la racine ; le detail imbrique est affiche dans le journal de la pipeline. La prevention des remplacements accidentels repose sur la revue de pull request (diff des templates), cfn-lint et cfn-guard, et sur des noms fixes (un remplacement non voulu echoue proprement avec rollback au lieu de dupliquer une ressource).
+- **Risque accepte** : un remplacement dans une pile imbriquee non repere en revue provoque un rollback (constate le 23/11, sans perte). Proprietaire bkay.

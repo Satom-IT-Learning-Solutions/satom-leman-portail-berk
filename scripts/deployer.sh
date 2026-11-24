@@ -76,26 +76,24 @@ fi
 aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
   --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' --output table
 
-# Garde-fou : aucune suppression ni remplacement CERTAIN non confirme, y compris dans les piles imbriquees.
-# Bloque : toute suppression, et tout remplacement cause par une modification directe du template
-# (ChangeSource=DirectModification, ex. GroupDescription). Les remplacements dus aux parametres des piles
-# imbriquees (ParameterReference / sorties d'autres piles, reevaluees a chaque deploiement) sont affiches
-# pour relecture : leur changement reel passe par la revue de PR (ex. AmiId, ADR-004).
+# Garde-fou (ADR-014) : bloque toute suppression (pile racine ou imbriquee) et tout remplacement annonce
+# sur la pile racine. Dans les change sets imbriques, l'indicateur de remplacement n'est pas fiable :
+# CloudFormation reevalue a chaque deploiement les parametres issus des sorties d'autres piles et les
+# annonce comme remplacements. Ce tableau est affiche pour relecture ; les vraies modifications sont
+# relues en pull request et controlees par cfn-guard.
 # shellcheck disable=SC2016  # les accents graves sont des litteraux JMESPath, pas une expansion shell
-REQ_DANGER='length(Changes[?ResourceChange.Action==`Remove` || length(ResourceChange.Details[?ChangeSource==`DirectModification` && Target.RequiresRecreation==`Always`]) > `0`])'
-compter_dangers() {
-  aws cloudformation describe-change-set --region "$REGION" --change-set-name "$1" ${2:+--stack-name "$2"} \
-    --query "$REQ_DANGER" --output text
-}
-DANGER=$(compter_dangers "$CS" "$PILE")
+DANGER=$(aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
+  --query 'length(Changes[?ResourceChange.Action==`Remove` || ResourceChange.Replacement==`True`])' --output text)
 for CS_IMBRIQUE in $(aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" --change-set-name "$CS" \
     --query "Changes[?ResourceChange.ChangeSetId].ResourceChange.ChangeSetId" --output text); do
   # shellcheck disable=SC2016
   aws cloudformation describe-change-set --region "$REGION" --change-set-name "$CS_IMBRIQUE" \
-    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,join(`,`,Details[?Target.RequiresRecreation!=`Never`].join(`:`,[Target.Name,ChangeSource]))]' --output table
-  DANGER=$((DANGER + $(compter_dangers "$CS_IMBRIQUE")))
+    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' --output table
+  # shellcheck disable=SC2016
+  DANGER=$((DANGER + $(aws cloudformation describe-change-set --region "$REGION" --change-set-name "$CS_IMBRIQUE" \
+    --query 'length(Changes[?ResourceChange.Action==`Remove`])' --output text)))
 done
-echo "Remplacements certains ou suppressions : ${DANGER}"
+echo "Suppressions (racine et imbriquees) ou remplacements a la racine : ${DANGER}"
 if [[ "$DANGER" != "0" && "${CONFIRMER_SUPPRESSION:-non}" != "oui" ]]; then
   echo "Le change set supprime ou remplace ${DANGER} ressource(s). Relancer avec CONFIRMER_SUPPRESSION=oui apres relecture."
   exit 2
