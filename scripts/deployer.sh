@@ -77,10 +77,12 @@ aws cloudformation describe-change-set --region "$REGION" --stack-name "$PILE" -
   --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' --output table
 
 # Garde-fou : aucune suppression ni remplacement CERTAIN non confirme, y compris dans les piles imbriquees.
-# Un remplacement a evaluation "Dynamic" (valeur issue d'une sortie d'une autre pile imbriquee, inconnue
-# au calcul du change set) est affiche pour relecture mais ne bloque pas ; "Static" + "Always" bloque.
+# Bloque : toute suppression, et tout remplacement cause par une modification directe du template
+# (ChangeSource=DirectModification, ex. GroupDescription). Les remplacements dus aux parametres des piles
+# imbriquees (ParameterReference / sorties d'autres piles, reevaluees a chaque deploiement) sont affiches
+# pour relecture : leur changement reel passe par la revue de PR (ex. AmiId, ADR-004).
 # shellcheck disable=SC2016  # les accents graves sont des litteraux JMESPath, pas une expansion shell
-REQ_DANGER='length(Changes[?ResourceChange.Action==`Remove` || length(ResourceChange.Details[?Evaluation==`Static` && Target.RequiresRecreation==`Always`]) > `0`])'
+REQ_DANGER='length(Changes[?ResourceChange.Action==`Remove` || length(ResourceChange.Details[?ChangeSource==`DirectModification` && Target.RequiresRecreation==`Always`]) > `0`])'
 compter_dangers() {
   aws cloudformation describe-change-set --region "$REGION" --change-set-name "$1" ${2:+--stack-name "$2"} \
     --query "$REQ_DANGER" --output text
@@ -90,7 +92,7 @@ for CS_IMBRIQUE in $(aws cloudformation describe-change-set --region "$REGION" -
     --query "Changes[?ResourceChange.ChangeSetId].ResourceChange.ChangeSetId" --output text); do
   # shellcheck disable=SC2016
   aws cloudformation describe-change-set --region "$REGION" --change-set-name "$CS_IMBRIQUE" \
-    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,join(`,`,Details[?Target.RequiresRecreation!=`Never`].join(`:`,[Target.Name,Evaluation]))]' --output table
+    --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,join(`,`,Details[?Target.RequiresRecreation!=`Never`].join(`:`,[Target.Name,ChangeSource]))]' --output table
   DANGER=$((DANGER + $(compter_dangers "$CS_IMBRIQUE")))
 done
 echo "Remplacements certains ou suppressions : ${DANGER}"
