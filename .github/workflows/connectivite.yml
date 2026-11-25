@@ -8,7 +8,7 @@ on:
       pile:
         description: Pile de connectivite
         type: choice
-        options: [firewall, peering, tgw, vpn]
+        options: [firewall, peering, tgw, vpn, dxgw]
       action:
         description: Creer/mettre a jour ou supprimer
         type: choice

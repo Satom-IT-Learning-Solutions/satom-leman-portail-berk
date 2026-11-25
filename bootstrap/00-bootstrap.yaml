@@ -117,6 +117,7 @@ Resources:
                   - config:TagResource
                   - config:UntagResource
                   - lambda:*
+                  - directconnect:*
                 Resource: "*"
                 Condition:
                   StringEquals: {aws:RequestedRegion: [eu-north-1, us-east-1]}

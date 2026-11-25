@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 8 - Direct Connect (conception) : passerelle dxgw-leman (ASN 64513) associee a la TGW,
+  prefixes annonces vers les sites limites au VPC prod (aucune route par defaut, dev exclu).
+  Aucune connexion physique ni interface virtuelle : la voie principale et la bascule VPN sont
+  decrites dans ADR-009. Necessite la pile stack-leman-tgw.
+
+Parameters:
+  Equipe:
+    Type: String
+    Default: bkay
+  TgwId:
+    Type: String
+  CidrProd:
+    Type: String
+    AllowedPattern: '^10\.0\.0\.0/16$'
+
+Resources:
+  PasserelleDx:
+    Type: AWS::DirectConnect::DirectConnectGateway
+    Properties:
+      DirectConnectGatewayName: !Sub "dxgw-leman-tp-${Equipe}"
+      AmazonSideAsn: "64513"
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  AssociationTgw:
+    Type: AWS::DirectConnect::DirectConnectGatewayAssociation
+    Properties:
+      DirectConnectGatewayId: !GetAtt PasserelleDx.DirectConnectGatewayId
+      AssociatedGatewayId: !Ref TgwId
+      AllowedPrefixesToDirectConnectGateway: [!Ref CidrProd]
+
+Outputs:
+  PasserelleDxId:
+    Value: !GetAtt PasserelleDx.DirectConnectGatewayId
