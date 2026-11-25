@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 7 - Deux VPN site a site (siege 203.0.113.10, agence 198.51.100.20) sur la TGW, routage
+  dynamique BGP, IKEv2 uniquement, AES-256/SHA-256/DH 14+. Pre-cles lues dans Secrets Manager
+  (reference dynamique, jamais dans le template ni le depot). Alarme CloudWatch sur TunnelState.
+
+Parameters:
+  Equipe:
+    Type: String
+    Default: bkay
+  TgwId:
+    Type: String
+  SecretPreCles:
+    Type: String
+    Default: leman/vpn-precles-bkay
+    Description: Secret JSON {siege1, siege2, agence1, agence2} cree hors depot (scripts/connectivite.sh)
+  TopicAlertes:
+    Type: String
+    Description: ARN du topic SNS d'exploitation (prod)
+
+Resources:
+  PasserelleSiege:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      IpAddress: 203.0.113.10
+      BgpAsn: 65010
+      Tags:
+        - {Key: Name, Value: !Sub "cgw-siege-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+  PasserelleAgence:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      IpAddress: 198.51.100.20
+      BgpAsn: 65020
+      Tags:
+        - {Key: Name, Value: !Sub "cgw-agence-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  VpnSiege:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref PasserelleSiege
+      TransitGatewayId: !Ref TgwId
+      StaticRoutesOnly: false
+      VpnTunnelOptionsSpecifications:
+        - PreSharedKey: !Sub "{{resolve:secretsmanager:${SecretPreCles}:SecretString:siege1}}"
+          IKEVersions: [{Value: ikev2}]
+          Phase1EncryptionAlgorithms: [{Value: AES256}]
+          Phase2EncryptionAlgorithms: [{Value: AES256}]
+          Phase1IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase2IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase1DHGroupNumbers: [{Value: 14}]
+          Phase2DHGroupNumbers: [{Value: 14}]
+        - PreSharedKey: !Sub "{{resolve:secretsmanager:${SecretPreCles}:SecretString:siege2}}"
+          IKEVersions: [{Value: ikev2}]
+          Phase1EncryptionAlgorithms: [{Value: AES256}]
+          Phase2EncryptionAlgorithms: [{Value: AES256}]
+          Phase1IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase2IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase1DHGroupNumbers: [{Value: 14}]
+          Phase2DHGroupNumbers: [{Value: 14}]
+      Tags:
+        - {Key: Name, Value: !Sub "vpn-siege-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  VpnAgence:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref PasserelleAgence
+      TransitGatewayId: !Ref TgwId
+      StaticRoutesOnly: false
+      VpnTunnelOptionsSpecifications:
+        - PreSharedKey: !Sub "{{resolve:secretsmanager:${SecretPreCles}:SecretString:agence1}}"
+          IKEVersions: [{Value: ikev2}]
+          Phase1EncryptionAlgorithms: [{Value: AES256}]
+          Phase2EncryptionAlgorithms: [{Value: AES256}]
+          Phase1IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase2IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase1DHGroupNumbers: [{Value: 14}]
+          Phase2DHGroupNumbers: [{Value: 14}]
+        - PreSharedKey: !Sub "{{resolve:secretsmanager:${SecretPreCles}:SecretString:agence2}}"
+          IKEVersions: [{Value: ikev2}]
+          Phase1EncryptionAlgorithms: [{Value: AES256}]
+          Phase2EncryptionAlgorithms: [{Value: AES256}]
+          Phase1IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase2IntegrityAlgorithms: [{Value: SHA2-256}]
+          Phase1DHGroupNumbers: [{Value: 14}]
+          Phase2DHGroupNumbers: [{Value: 14}]
+      Tags:
+        - {Key: Name, Value: !Sub "vpn-agence-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  # Runbook : docs/runbooks/alarme-tunnel-vpn.md
+  AlarmeTunnelSiege:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "alarm-vpn-siege-${Equipe}"
+      AlarmDescription: "CRITIQUE - aucun tunnel UP vers le siege pendant 5 min. Runbook docs/runbooks/alarme-tunnel-vpn.md"
+      Namespace: AWS/VPN
+      MetricName: TunnelState
+      Dimensions: [{Name: VpnId, Value: !Ref VpnSiege}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref TopicAlertes]
+      OKActions: [!Ref TopicAlertes]
+  AlarmeTunnelAgence:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "alarm-vpn-agence-${Equipe}"
+      AlarmDescription: "CRITIQUE - aucun tunnel UP vers l'agence pendant 5 min. Runbook docs/runbooks/alarme-tunnel-vpn.md"
+      Namespace: AWS/VPN
+      MetricName: TunnelState
+      Dimensions: [{Name: VpnId, Value: !Ref VpnAgence}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref TopicAlertes]
+      OKActions: [!Ref TopicAlertes]
+
+Outputs:
+  VpnSiege:
+    Value: !Ref VpnSiege
+  VpnAgence:
+    Value: !Ref VpnAgence

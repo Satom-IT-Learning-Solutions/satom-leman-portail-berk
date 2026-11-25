@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 6 - Transit Gateway tgw-leman (ASN 64512) : attachements prod et dev, une table de routage
+  par environnement (association + propagation croisee prod <-> dev uniquement). Les sites (VPN,
+  sprint 7) propagent dans la table prod seulement : dev ne joint pas les sites.
+
+Parameters:
+  Equipe:
+    Type: String
+    Default: bkay
+  VpcProd:
+    Type: AWS::EC2::VPC::Id
+  VpcDev:
+    Type: AWS::EC2::VPC::Id
+  SubnetsProd:
+    Type: List<AWS::EC2::Subnet::Id>
+  SubnetsDev:
+    Type: List<AWS::EC2::Subnet::Id>
+  CidrProd:
+    Type: String
+  CidrDev:
+    Type: String
+  RtPriveeProd:
+    Type: String
+  RtPriveeDev:
+    Type: String
+  RtPubliqueDev:
+    Type: String
+
+Resources:
+  Tgw:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      AmazonSideAsn: 64512
+      Description: tgw-leman
+      DefaultRouteTableAssociation: disable
+      DefaultRouteTablePropagation: disable
+      DnsSupport: enable
+      VpnEcmpSupport: enable
+      Tags:
+        - {Key: Name, Value: !Sub "tgw-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+
+  AttachementProd:
+    Type: AWS::EC2::TransitGatewayVpcAttachment
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      VpcId: !Ref VpcProd
+      SubnetIds: !Ref SubnetsProd
+      Tags:
+        - {Key: Name, Value: !Sub "tgw-att-prod-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+  AttachementDev:
+    Type: AWS::EC2::TransitGatewayVpcAttachment
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      VpcId: !Ref VpcDev
+      SubnetIds: !Ref SubnetsDev
+      Tags:
+        - {Key: Name, Value: !Sub "tgw-att-dev-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: dev}
+
+  TableProd:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      Tags:
+        - {Key: Name, Value: !Sub "tgw-rt-prod-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: prod}
+  TableDev:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref Tgw
+      Tags:
+        - {Key: Name, Value: !Sub "tgw-rt-dev-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: dev}
+
+  AssociationProd:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachementProd, TransitGatewayRouteTableId: !Ref TableProd}
+  AssociationDev:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachementDev, TransitGatewayRouteTableId: !Ref TableDev}
+  # Propagations croisees : prod apprend dev, dev apprend prod (et rien d'autre)
+  PropagationDevDansProd:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachementDev, TransitGatewayRouteTableId: !Ref TableProd}
+  PropagationProdDansDev:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties: {TransitGatewayAttachmentId: !Ref AttachementProd, TransitGatewayRouteTableId: !Ref TableDev}
+
+  RouteProdVersDev:
+    Type: AWS::EC2::Route
+    DependsOn: AttachementProd
+    Properties: {RouteTableId: !Ref RtPriveeProd, DestinationCidrBlock: !Ref CidrDev, TransitGatewayId: !Ref Tgw}
+  RouteDevPriveVersProd:
+    Type: AWS::EC2::Route
+    DependsOn: AttachementDev
+    Properties: {RouteTableId: !Ref RtPriveeDev, DestinationCidrBlock: !Ref CidrProd, TransitGatewayId: !Ref Tgw}
+  RouteDevPublicVersProd:
+    Type: AWS::EC2::Route
+    DependsOn: AttachementDev
+    Properties: {RouteTableId: !Ref RtPubliqueDev, DestinationCidrBlock: !Ref CidrProd, TransitGatewayId: !Ref Tgw}
+
+Outputs:
+  TgwId:
+    Value: !Ref Tgw
+  TableProd:
+    Value: !Ref TableProd
+  TableDev:
+    Value: !Ref TableDev
+  AttachementProd:
+    Value: !Ref AttachementProd

@@ -136,6 +136,22 @@ Outputs:
     Value: !GetAtt Reseau.Outputs.VpcId
   RtPrivee:
     Value: !GetAtt Reseau.Outputs.RtPrivee
+  RtPublique:
+    Value: !GetAtt Reseau.Outputs.RtPublique
+  RtFw:
+    Value: !GetAtt Reseau.Outputs.RtFw
+  CidrVpc:
+    Value: !GetAtt Reseau.Outputs.CidrVpc
+  SubPublic1a:
+    Value: !GetAtt Reseau.Outputs.SubPublic1a
+  SubPrive1a:
+    Value: !GetAtt Reseau.Outputs.SubPrive1a
+  SubPrive1b:
+    Value: !GetAtt Reseau.Outputs.SubPrive1b
+  SubFw1a:
+    Value: !GetAtt Reseau.Outputs.SubFw1a
+  CleJournauxArn:
+    Value: !GetAtt Reseau.Outputs.CleJournauxArn
   AlbDns:
     Value: !GetAtt Equilibrage.Outputs.AlbDns
   AlbZoneId:

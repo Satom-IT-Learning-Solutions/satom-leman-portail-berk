@@ -8,3 +8,4 @@
 | CKV_AWS_158 | Groupe de journaux applicatif avec chiffrement par defaut du service ; le groupe Flow Logs utilise KMS | bkay | 30/11/2026 |
 | CKV_AWS_107 a 111 | Role d'execution CloudFormation (voir ADR-002) | bkay | 30/11/2026 |
 | CKV_AWS_116/117/173 | Concernent les Lambda ; aucune Lambda applicative | bkay | 30/11/2026 |
+| CKV_GHA_7 | Le workflow `connectivite-session` choisit une operation (pile, action) parmi des listes fermees ; il ne produit aucun artefact de build | bkay | 30/11/2026 |

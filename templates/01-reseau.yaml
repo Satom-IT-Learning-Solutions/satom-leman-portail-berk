@@ -179,9 +179,21 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: {SubnetId: !Ref SubPublic1b, RouteTableId: !Ref RtPublique}
 
+  # Table dediee au sous-reseau du pare-feu (sprint 4) : la route 0.0.0.0/0 -> NAT est ajoutee
+  # par la pile stack-leman-<env>-firewall, deployee seulement pendant les sessions.
+  RtFw:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: Name, Value: !Sub "rt-fw-${Environnement}-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
   AssocFw1a:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref SubFw1a, RouteTableId: !Ref RtPublique}
+    Properties: {SubnetId: !Ref SubFw1a, RouteTableId: !Ref RtFw}
 
   RtPrivee:
     Type: AWS::EC2::RouteTable
@@ -375,5 +387,7 @@ Outputs:
     Value: !Ref RtPrivee
   RtPublique:
     Value: !Ref RtPublique
+  RtFw:
+    Value: !Ref RtFw
   CleJournauxArn:
     Value: !GetAtt CleJournaux.Arn

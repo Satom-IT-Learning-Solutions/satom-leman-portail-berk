@@ -19,3 +19,4 @@ skip-check:
   - CKV_AWS_108   # idem
   - CKV_AWS_107   # idem
   - CKV_AWS_110   # idem
+  - CKV_GHA_7     # connectivite-session : entrees limitees a des listes fermees (pile, action), sans effet sur un build (ADR-007)

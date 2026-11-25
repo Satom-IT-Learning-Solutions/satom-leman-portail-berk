@@ -49,3 +49,8 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Le filtre ChangeSource ne suffit pas non plus (les memes proprietes portent aussi `DirectModification`). Decision ADR-014 : blocage des suppressions et des remplacements a la racine, detail imbrique affiche pour relecture.
 - Pile edge : `aws cloudformation deploy` appelle `GetTemplateSummary`, non accorde au role de pipeline. Plutot que d'elargir le role, la meme fonction de change set (avec garde-fou) applique la pile racine et la pile edge.
 - Etape 5 : seuil k6 `http_req_failed` depasse. Cause : la regle WAF de limitation de debit (1 000 requetes / 5 min / IP) bloquait le test de charge (20 utilisateurs virtuels depuis une seule IP) ; la protection fonctionne. Charge nominale fixee a 10 utilisateurs virtuels, limite WAF a 10 000 / 5 min / IP ; resume k6 affiche dans le journal de la pipeline.
+
+### 25/11/2026 - Sprints 4 a 7 (templates)
+- Templates `07-firewall` (NAT + Network Firewall, liste blanche `.amazonaws.com` / `.amazonlinux.com`, refus et alerte par defaut, journaux KMS, routage symetrique prive -> pare-feu -> NAT), `08-peering`, `09-tgw` (ASN 64512, une table par environnement, propagations croisees prod/dev uniquement), `10-vpn` (deux VPN BGP IKEv2 AES-256/SHA-256/DH14, pre-cles par reference dynamique Secrets Manager, alarmes TunnelState).
+- Workflow `connectivite-session` (declenchement manuel) et `scripts/connectivite.sh` : creation et suppression par session, garde-fou commun (`scripts/lib-cfn.sh`).
+- Table de routage dediee `rt-fw` pour `sub-fw-1a` dans la pile reseau (prerequis du routage symetrique du pare-feu).
