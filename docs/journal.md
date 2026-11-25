@@ -54,3 +54,9 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Templates `07-firewall` (NAT + Network Firewall, liste blanche `.amazonaws.com` / `.amazonlinux.com`, refus et alerte par defaut, journaux KMS, routage symetrique prive -> pare-feu -> NAT), `08-peering`, `09-tgw` (ASN 64512, une table par environnement, propagations croisees prod/dev uniquement), `10-vpn` (deux VPN BGP IKEv2 AES-256/SHA-256/DH14, pre-cles par reference dynamique Secrets Manager, alarmes TunnelState).
 - Workflow `connectivite-session` (declenchement manuel) et `scripts/connectivite.sh` : creation et suppression par session, garde-fou commun (`scripts/lib-cfn.sh`).
 - Table de routage dediee `rt-fw` pour `sub-fw-1a` dans la pile reseau (prerequis du routage symetrique du pare-feu).
+
+### 25/11/2026 - Prod et sprints 4-5
+- Etape 6 approuvee par Berk : `stack-leman-prod` et `stack-leman-prod-edge` CREATE_COMPLETE (portail https://dpp47a5f0ecz1.cloudfront.net/), etape 7 verte. Premiere execution complete des sept etapes.
+- Sprint 4 (pile `stack-leman-firewall`, creee 08:21 UTC, supprimee 08:38) : depuis app-01 prod via Session Manager, `s3.eu-north-1.amazonaws.com` -> 307, depot AL2023 (dnf) OK, `example.com` et `www.google.com` BLOQUES ; alertes `blocked` dans `/leman-bkay/prod/firewall`. Mesure sprint 2 associee : sortie vers le depot de paquets via NAT, aucune IP publique sur app-01.
+- Sprint 5 (pile `stack-leman-peering`) : Reachability Analyzer dev-01 -> app-01 prod tcp/8080 accessible via `pcx-08128e076b23dbbb1`, dev-01 -> web-01 prod tcp/22 bloque (`ENI_SG_RULES_MISMATCH`). Routes limitees aux CIDR 10.0.0.0/16 et 10.1.0.0/16, aucune route par defaut.
+- web-01-bkay et app-01-bkay du cours (semaine 47) arretes a la demande de Berk.
