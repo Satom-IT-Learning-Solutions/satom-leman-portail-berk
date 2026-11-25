@@ -10,7 +10,7 @@
 | Règle | Correction |
 |---|---|
 | githubactions:S7637 (10) | Toutes les actions épinglées par SHA de commit complet (tag en commentaire) |
-| githubactions:S8541 / S8544 (8) | `pip install --only-binary :all:` + versions verrouillées : `requirements-dev.txt` et nouveau `requirements-securite.txt` (lock complet de 147 paquets pour checkov, Semgrep, pip-audit, installé avec `--no-deps`) |
+| githubactions:S8541 / S8544 (8) | `pip install --only-binary :all:` + versions verrouillées : `requirements-dev.txt` et nouveau `requirements-securite.txt` (lock complet avec empreintes SHA-256, installé avec `--require-hashes`) |
 | githubactions:S6506 (2) | `curl --proto '=https' --tlsv1.2` pour cfn-guard et gitleaks |
 | cloudformation:S6321 (1) | `tests/guard/sg-ssh-ouvert.yaml` exclu : c'est le cas négatif volontaire du test cfn-guard |
 
