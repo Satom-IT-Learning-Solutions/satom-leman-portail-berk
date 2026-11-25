@@ -1,0 +1,4 @@
+# Outils de securite du stage 2 (versions verrouillees, roues binaires uniquement)
+checkov==3.4.11
+semgrep==1.163.0
+pip-audit==2.10.1
