@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Sprints 4 a 7 : piles de connectivite facturees a l'heure, creees pour une session puis supprimees.
-# Usage : scripts/connectivite.sh <firewall|peering|tgw|vpn> <deployer|supprimer>
+# Usage : scripts/connectivite.sh <firewall|peering|tgw|vpn|dxgw> <deployer|supprimer>
 #   firewall : NAT + Network Firewall dans vpc-prod (sprint 4)
 #   peering  : peering dev <-> prod (sprint 5) - exclusif avec tgw
 #   tgw      : Transit Gateway et tables par environnement (sprint 6) - exclusif avec peering
 #   vpn      : deux VPN site a site sur la TGW (sprint 7) - necessite tgw
+#   dxgw     : passerelle Direct Connect associee a la TGW (sprint 8, conception) - necessite tgw
 set -euo pipefail
-PILE_TYPE="${1:?usage: connectivite.sh <firewall|peering|tgw|vpn> <deployer|supprimer>}"
-ACTION="${2:?usage: connectivite.sh <firewall|peering|tgw|vpn> <deployer|supprimer>}"
+PILE_TYPE="${1:?usage: connectivite.sh <firewall|peering|tgw|vpn|dxgw> <deployer|supprimer>}"
+ACTION="${2:?usage: connectivite.sh <firewall|peering|tgw|vpn|dxgw> <deployer|supprimer>}"
 REGION="${AWS_REGION:-eu-north-1}"; EQUIPE=bkay; ENV=prod; AUTO=--auto
 COMPTE="$(aws sts get-caller-identity --query Account --output text)"
 ROLE_EXEC="arn:aws:iam::${COMPTE}:role/leman-cfn-execution-${EQUIPE}"
@@ -19,8 +20,12 @@ p() { printf 'ParameterKey=%s,ParameterValue=%s ' "$1" "$2"; }
 cidr_sous_reseau() { aws ec2 describe-subnets --region "$REGION" --subnet-ids "$1" --query 'Subnets[0].CidrBlock' --output text; }
 
 if [[ "$ACTION" == supprimer ]]; then
-  [[ "$PILE_TYPE" == tgw ]] && aws cloudformation describe-stacks --region "$REGION" --stack-name stack-leman-vpn >/dev/null 2>&1 \
-    && { echo "Supprimer d'abord la pile vpn (elle depend de la TGW)"; exit 2; }
+  if [[ "$PILE_TYPE" == tgw ]]; then
+    for DEP in vpn dxgw; do
+      aws cloudformation describe-stacks --region "$REGION" --stack-name "stack-leman-${DEP}" >/dev/null 2>&1 \
+        && { echo "Supprimer d'abord la pile ${DEP} (elle depend de la TGW)"; exit 2; }
+    done
+  fi
   DEBUT=$(date +%s)
   aws cloudformation delete-stack --region "$REGION" --stack-name "$PILE" --role-arn "$ROLE_EXEC"
   aws cloudformation wait stack-delete-complete --region "$REGION" --stack-name "$PILE"
@@ -82,5 +87,8 @@ case "$PILE_TYPE" in
         --transit-gateway-attachment-id "$ATT" >/dev/null 2>&1 || true
       echo "Attachement ${ATT} (${VPN}) : associe et propage dans ${TABLE_PROD}"
     done ;;
+  dxgw)
+    PARAMS="$(p Equipe "$EQUIPE")$(p TgwId "$(sortie stack-leman-tgw TgwId)")$(p CidrProd "$(sortie stack-leman-prod CidrVpc)")"
+    appliquer "$PILE" templates/11-dxgw.yaml "$PARAMS" ;;
   *) echo "Pile inconnue : ${PILE_TYPE}"; exit 2 ;;
 esac
