@@ -12,5 +12,7 @@ select = ["E", "F", "W", "I", "B", "S", "N", "UP", "A"]
 testpaths = ["app/tests"]
 
 [tool.coverage.run]
-source = ["app", "scripts"]
+relative_files = true
+source = ["."]
+include = ["app/*", "scripts/*"]
 omit = ["app/tests/*"]
