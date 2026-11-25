@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 4 - Sortie Internet inspectee : NAT Gateway + AWS Network Firewall (politique stateful,
+  liste blanche de domaines) dans sub-fw-1a. Facture a l'heure : pile creee pour la session puis
+  supprimee (scripts/connectivite.sh). Chemin : prive -> pare-feu -> NAT -> IGW ; retour symetrique.
+
+Parameters:
+  Environnement:
+    Type: String
+    AllowedValues: [dev, prod]
+  Equipe:
+    Type: String
+    Default: bkay
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubFw1a:
+    Type: AWS::EC2::Subnet::Id
+  SubPublic1a:
+    Type: AWS::EC2::Subnet::Id
+  RtPrivee:
+    Type: String
+  RtPublique:
+    Type: String
+  RtFw:
+    Type: String
+  CidrPrive1a:
+    Type: String
+  CidrPrive1b:
+    Type: String
+  CleJournauxArn:
+    Type: String
+
+Resources:
+  # ---------- Politique : seuls les domaines utiles a l'exploitation sont autorises ----------
+  GroupeDomainesAutorises:
+    Type: AWS::NetworkFirewall::RuleGroup
+    Properties:
+      RuleGroupName: !Sub "rg-domaines-autorises-${Environnement}-${Equipe}"
+      Type: STATEFUL
+      Capacity: 100
+      Description: Liste blanche TLS (SNI) et HTTP (Host) pour les mises a jour et les services AWS
+      RuleGroup:
+        StatefulRuleOptions: {RuleOrder: STRICT_ORDER}
+        RulesSource:
+          RulesSourceList:
+            GeneratedRulesType: ALLOWLIST
+            TargetTypes: [TLS_SNI, HTTP_HOST]
+            Targets:
+              - .amazonaws.com
+              - .amazonlinux.com
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Politique:
+    Type: AWS::NetworkFirewall::FirewallPolicy
+    Properties:
+      FirewallPolicyName: !Sub "fwp-leman-${Environnement}-${Equipe}"
+      FirewallPolicy:
+        StatelessDefaultActions: ["aws:forward_to_sfe"]
+        StatelessFragmentDefaultActions: ["aws:forward_to_sfe"]
+        StatefulEngineOptions: {RuleOrder: STRICT_ORDER}
+        # Tout ce qui n'est pas explicitement autorise est refuse et journalise
+        StatefulDefaultActions: ["aws:drop_established", "aws:alert_established"]
+        StatefulRuleGroupReferences:
+          - {ResourceArn: !Ref GroupeDomainesAutorises, Priority: 10}
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  PareFeu:
+    Type: AWS::NetworkFirewall::Firewall
+    Properties:
+      FirewallName: !Sub "nfw-leman-${Environnement}-${Equipe}"
+      FirewallPolicyArn: !Ref Politique
+      VpcId: !Ref VpcId
+      SubnetMappings: [{SubnetId: !Ref SubFw1a}]
+      DeleteProtection: false
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  GroupeJournauxPareFeu:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/leman-${Equipe}/${Environnement}/firewall"
+      RetentionInDays: 7
+      KmsKeyId: !Ref CleJournauxArn
+      Tags:
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  JournalisationPareFeu:
+    Type: AWS::NetworkFirewall::LoggingConfiguration
+    Properties:
+      FirewallArn: !Ref PareFeu
+      LoggingConfiguration:
+        LogDestinationConfigs:
+          - {LogType: ALERT, LogDestinationType: CloudWatchLogs, LogDestination: {logGroup: !Ref GroupeJournauxPareFeu}}
+
+  # ---------- NAT (dans le sous-reseau public) ----------
+  EipNat:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - {Key: Name, Value: !Sub "eip-nat-fw-${Environnement}-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  Nat:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EipNat.AllocationId
+      SubnetId: !Ref SubPublic1a
+      Tags:
+        - {Key: Name, Value: !Sub "nat-${Environnement}-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: !Ref Environnement}
+
+  # ---------- Routage symetrique ----------
+  # prive -> point de terminaison du pare-feu
+  RoutePriveeVersPareFeu:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RtPrivee
+      DestinationCidrBlock: 0.0.0.0/0
+      VpcEndpointId: !Select [1, !Split [":", !Select [0, !GetAtt PareFeu.EndpointIds]]]
+
+  # sous-reseau du pare-feu -> NAT
+  RoutePareFeuVersNat:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RtFw
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref Nat
+
+  # retour : la NAT renvoie vers les sous-reseaux prives en repassant par le pare-feu
+  RetourPrive1a:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RtPublique
+      DestinationCidrBlock: !Ref CidrPrive1a
+      VpcEndpointId: !Select [1, !Split [":", !Select [0, !GetAtt PareFeu.EndpointIds]]]
+  RetourPrive1b:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RtPublique
+      DestinationCidrBlock: !Ref CidrPrive1b
+      VpcEndpointId: !Select [1, !Split [":", !Select [0, !GetAtt PareFeu.EndpointIds]]]
+
+Outputs:
+  PareFeuArn:
+    Value: !Ref PareFeu
+  GroupeJournauxPareFeu:
+    Value: !Ref GroupeJournauxPareFeu
+  NatId:
+    Value: !Ref Nat

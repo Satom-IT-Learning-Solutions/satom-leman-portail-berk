@@ -1,0 +1,43 @@
+name: connectivite-session
+
+# Sprints 4 a 7 : composants factures a l'heure (NAT + Network Firewall, peering, TGW, VPN),
+# crees au debut d'une session de travail puis supprimes. Declenchement manuel uniquement.
+on:
+  workflow_dispatch:
+    inputs:
+      pile:
+        description: Pile de connectivite
+        type: choice
+        options: [firewall, peering, tgw, vpn]
+      action:
+        description: Creer/mettre a jour ou supprimer
+        type: choice
+        options: [deployer, supprimer]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connectivite
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-north-1
+  ROLE_DEPLOIEMENT: arn:aws:iam::223310160799:role/leman-github-deploy-bkay
+
+jobs:
+  session:
+    name: ${{ inputs.action }} ${{ inputs.pile }}
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: ${{ inputs.action }} stack-leman-${{ inputs.pile }}
+        run: scripts/connectivite.sh "${{ inputs.pile }}" "${{ inputs.action }}"

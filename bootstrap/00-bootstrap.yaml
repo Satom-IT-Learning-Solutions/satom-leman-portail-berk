@@ -155,6 +155,10 @@ Resources:
                          cloudformation:CreateChangeSet, cloudformation:DescribeChangeSet,
                          cloudformation:ExecuteChangeSet, cloudformation:DeleteChangeSet]
                 Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/stack-leman-*"
+              - Sid: PreClesVpn
+                Effect: Allow
+                Action: [secretsmanager:GetSecretValue, secretsmanager:DescribeSecret]
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:leman/*"
               - Sid: TransmettreLeRoleAuxPilesImbriquees
                 Effect: Allow
                 Action: iam:PassRole
@@ -226,6 +230,16 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:s3:::leman-static-*-${Equipe}-${AWS::AccountId}"
                   - !Sub "arn:${AWS::Partition}:s3:::leman-static-*-${Equipe}-${AWS::AccountId}/*"
+              - Sid: SessionsConnectivite
+                Effect: Allow
+                Action: [secretsmanager:DescribeSecret, secretsmanager:CreateSecret, secretsmanager:TagResource]
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:leman/*"
+              - Sid: SessionsConnectiviteGlobal
+                Effect: Allow
+                Action: [secretsmanager:GetRandomPassword, sns:ListTopics, ec2:AssociateTransitGatewayRouteTable,
+                         ec2:EnableTransitGatewayRouteTablePropagation, ec2:CreateNetworkInsightsPath,
+                         ec2:StartNetworkInsightsAnalysis, ec2:CreateTags]
+                Resource: "*"
               - Sid: InvalidationCache
                 Effect: Allow
                 Action: [cloudfront:CreateInvalidation, cloudfront:GetInvalidation, cloudfront:GetDistribution]

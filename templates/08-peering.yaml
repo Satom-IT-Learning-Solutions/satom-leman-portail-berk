@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Sprint 5 - Peering vpc-dev-leman <-> vpc-prod-leman. Routes limitees au CIDR homologue,
+  aucune route par defaut. Incompatible avec la TGW (memes destinations) : l'une ou l'autre.
+
+Parameters:
+  Equipe:
+    Type: String
+    Default: bkay
+  VpcProd:
+    Type: AWS::EC2::VPC::Id
+  VpcDev:
+    Type: AWS::EC2::VPC::Id
+  CidrProd:
+    Type: String
+    AllowedPattern: '^10\.0\.0\.0/16$'
+  CidrDev:
+    Type: String
+    AllowedPattern: '^10\.1\.0\.0/16$'
+  RtPriveeProd:
+    Type: String
+  RtPriveeDev:
+    Type: String
+  RtPubliqueDev:
+    Type: String
+    Description: Table de sub-public-1a (dev-01)
+
+Resources:
+  Peering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !Ref VpcDev
+      PeerVpcId: !Ref VpcProd
+      Tags:
+        - {Key: Name, Value: !Sub "pcx-dev-prod-leman-${Equipe}"}
+        - {Key: Projet, Value: SatomCloudNetwork}
+        - {Key: Equipe, Value: !Ref Equipe}
+        - {Key: Environnement, Value: dev}
+
+  RouteProdVersDev:
+    Type: AWS::EC2::Route
+    Properties: {RouteTableId: !Ref RtPriveeProd, DestinationCidrBlock: !Ref CidrDev, VpcPeeringConnectionId: !Ref Peering}
+  RouteDevPriveVersProd:
+    Type: AWS::EC2::Route
+    Properties: {RouteTableId: !Ref RtPriveeDev, DestinationCidrBlock: !Ref CidrProd, VpcPeeringConnectionId: !Ref Peering}
+  RouteDevPublicVersProd:
+    Type: AWS::EC2::Route
+    Properties: {RouteTableId: !Ref RtPubliqueDev, DestinationCidrBlock: !Ref CidrProd, VpcPeeringConnectionId: !Ref Peering}
+
+Outputs:
+  PeeringId:
+    Value: !Ref Peering
