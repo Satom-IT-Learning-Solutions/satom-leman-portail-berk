@@ -10,8 +10,8 @@ Source : historique GitHub Actions du workflow `pipeline-devsecops` sur `main` (
 |---|---|---|---|---|---|
 | G0 et sprints 1-3, 9-12 (23/11) | 1 / 7 | 0 | - | 6 / 7 = 86 % (mise au point OIDC, IAM, noms de SG) | 26 min puis 39 min (temps actif) |
 | Sprints 11 et 13 (24/11) | 3 / 9 | 0 | - | 6 / 9 = 67 % (garde-fou des change sets, k6) | 64 min |
-| Sprints 4 a 8 et prod (25/11) | 2 / 2 | 1 | **31 min** (commit 07:49 -> prod 08:20 UTC, approbation manuelle comprise) | 0 / 2 = 0 % | - |
-| **Total** | **6 / 18** | **1** | 31 min | **12 / 18 = 67 %** (en baisse : 0 % sur la derniere periode) | **~43 min** (moyenne) |
+| Sprints 4 a 8 et prod (25-26/11) | 3 / 3 | 2 | **31 min** (commit 07:49 -> prod 08:20 UTC, approbation manuelle comprise) | 0 / 2 = 0 % | - |
+| **Total** | **7 / 19** | **2** | 31 min | **12 / 19 = 63 %** (en baisse : 0 % sur la derniere periode) | **~43 min** (moyenne) |
 
 Lecture : le taux d'echec eleve des deux premiers jours correspond a la mise au point de la chaine (droits OIDC et IAM, comportement des change sets imbriques) ; chaque echec est arrete par la pipeline avant d'atteindre prod, documente dans ce journal et corrige par une PR. Aucun echec n'a touche la prod.
 
@@ -80,3 +80,8 @@ Lecture : le taux d'echec eleve des deux premiers jours correspond a la mise au 
 - Correction (PR #24, ADR-016) : 21 problemes corriges dans le code (actions GitHub epinglees par SHA, dependances Python verrouillees avec empreintes et installees en roues binaires `--require-hashes`, `curl --proto '=https'`, exclusion du cas negatif cfn-guard, chemins de couverture) ; 14 exceptions d'architecture acceptees et justifiees (`sonar.issue.ignore.multicriteria`).
 - pip-audit : bloquant sur les dependances du projet ; informatif sur les outils CI (checkov et Semgrep imposent des versions de `mcp`, `asteval`, `opentelemetry-api` avec CVE connues, non corrigibles de notre cote).
 - Resultat sur `main` : **quality gate PASSED**, securite A (0 probleme), fiabilite A, couverture 92,9 %, 0 hotspot. Pipeline `main` vert jusqu'a l'etape 5 (dev, k6, ZAP) ; un ancien run en attente d'approbation prod, devenu obsolete et bloquant la file `concurrency`, a ete annule.
+
+### 26/11/2026 - Cloture : deuxieme deploiement prod
+- Documentation fusionnee (PR #22) ; ancien run en attente d'approbation annule pour ne garder qu'une approbation sur la version finale.
+- Run #58 (`main`, commit 9f6935a) : etapes 1 a 5 vertes, **etape 6 approuvee par Berk** le 26/11, deploiement prod et etape 7 verts. **Sept etapes vertes** (10 min 42 s hors attente d'approbation).
+- DORA mis a jour : 2 deploiements prod, 0 echec en prod.

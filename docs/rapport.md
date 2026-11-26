@@ -33,7 +33,7 @@ vpc-prod 10.0.0.0/16 <-> (peering | TGW 64512) <-> vpc-dev 10.1.0.0/16 ; TGW <- 
 | Performance | k6 10 VU, 3 min | 3 573 req, 0 % erreur, p95 209 ms, p99 234 ms | < 0,5 % / 500 ms / 1 s | OK |
 | Fiabilite | Reprise de dev (S13) | suppression 338 s, recreation ~14 min ; RPO 0 (donnees) | documentes | OK |
 | Couts | Budget | 74,55 USD / 150 au 23/11 (compte partage) | < 80 % | OK |
-| Gouvernance | DORA | 6/18 deploiements dev reussis, 1 prod, delai 31 min, MTTR ~43 min | renseignes | OK |
+| Gouvernance | DORA | 7/19 deploiements dev reussis, 2 prod (0 echec en prod), delai 31 min, MTTR ~43 min | renseignes | OK |
 
 ## 3. Ecarts et actions correctives
 
