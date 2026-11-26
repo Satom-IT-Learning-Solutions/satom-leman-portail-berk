@@ -73,3 +73,10 @@ Lecture : le taux d'echec eleve des deux premiers jours correspond a la mise au 
 - Sprint 8 (piles `stack-leman-tgw` puis `stack-leman-dxgw`) : `dxgw-leman-tp-bkay` (ASN 64513) `associated` a la TGW, seul 10.0.0.0/16 autorise vers les sites, attachement `direct-connect-gateway` disponible. Piles supprimees a 09:25 UTC.
 - Verification de conformite : Security Hub non active sur le compte (`not subscribed`), aucun detecteur GuardDuty ni enregistreur AWS Config. Activation au niveau du compte partage en attente de l'accord de Berk / du formateur.
 - Abonnements SNS dev et prod en `PendingConfirmation` : confirmation demandee a Berk avant le test d'alarme de bout en bout.
+
+### 25/11/2026 - SonarQube Cloud (gate G1)
+- Installation de l'app GitHub SonarQubeCloud refusee faute de droits d'administration sur l'organisation (demande transmise puis abandonnee). Organisation SonarQube Cloud `leman-berk` creee manuellement (plan Free, projet public `leman-berk_satom-leman-portail-berk`), jeton `SONAR_TOKEN` ajoute par Berk dans les secrets du depot (PR #23).
+- Premiere analyse de `main` en echec : branche principale nommee `master` cote SonarQube (renommee `main`). Seconde analyse : quality gate FAILED, **35 problemes de securite (note E)**.
+- Correction (PR #24, ADR-016) : 21 problemes corriges dans le code (actions GitHub epinglees par SHA, dependances Python verrouillees avec empreintes et installees en roues binaires `--require-hashes`, `curl --proto '=https'`, exclusion du cas negatif cfn-guard, chemins de couverture) ; 14 exceptions d'architecture acceptees et justifiees (`sonar.issue.ignore.multicriteria`).
+- pip-audit : bloquant sur les dependances du projet ; informatif sur les outils CI (checkov et Semgrep imposent des versions de `mcp`, `asteval`, `opentelemetry-api` avec CVE connues, non corrigibles de notre cote).
+- Resultat sur `main` : **quality gate PASSED**, securite A (0 probleme), fiabilite A, couverture 92,9 %, 0 hotspot. Pipeline `main` vert jusqu'a l'etape 5 (dev, k6, ZAP) ; un ancien run en attente d'approbation prod, devenu obsolete et bloquant la file `concurrency`, a ete annule.

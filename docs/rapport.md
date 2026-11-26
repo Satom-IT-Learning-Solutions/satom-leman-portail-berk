@@ -23,7 +23,7 @@ vpc-prod 10.0.0.0/16 <-> (peering | TGW 64512) <-> vpc-dev 10.1.0.0/16 ; TGW <- 
 | IaC | cfn-lint, cfn-guard, checkov | 0 erreur, 0 echec (cas negatif SSH ouvert refuse) | 0 | OK |
 | Securite | gitleaks (historique), Semgrep, pip-audit | 0 secret, 0 finding high, 0 vulnerabilite | 0 | OK |
 | Securite | DAST ZAP baseline | 0 alerte high (64 regles PASS, 4 WARN analyses) | 0 high | OK |
-| Qualite | Couverture des tests | 93 % (pytest) | >= 80 % | OK (SonarQube : voir 3) |
+| Qualite | SonarQube Cloud (quality gate Sonar way) | PASSED : securite A, fiabilite A, couverture 92,9 %, 0 hotspot (35 problemes initiaux traites, ADR-016) | Passed | OK |
 | Reseau | Sous-reseaux / routage (S1-2) | 2 zones, aucune route privee vers l'IGW | - | OK |
 | Reseau | Reachability web-01 -> app-01 (S3) | 8080 accessible, 22 bloque | - | OK |
 | Reseau | Pare-feu (S4) | amazonaws.com et depot AL2023 OK, example.com et google.com bloques et journalises | - | OK |
@@ -43,6 +43,8 @@ vpc-prod 10.0.0.0/16 <-> (peering | TGW 64512) <-> vpc-dev 10.1.0.0/16 ; TGW <- 
 | Budget et WAF hors us-east-1 | SCP de l'organisation interdisant CloudFormation en us-east-1 | Budget du module 0 reutilise (ADR-006), WAF regional (ADR-011) |
 | CloudFront -> ALB en HTTP | Certificat d'origine non public (domaine fictif) | Liste de prefixes CloudFront, HTTPS obligatoire cote client (ADR-005) |
 | Tunnels VPN DOWN | Passerelles client fictives (RFC 5737) | Supervision demontree ; tunnels UP au module 7 (ADR-015) |
+| Quality gate SonarQube initiale en echec (note E) | Actions non epinglees, dependances CI non verrouillees, choix d'architecture signales | 21 corrections, 14 exceptions justifiees (ADR-016) |
+| Security Hub, GuardDuty, Config inactifs | Services non actives sur le compte partage de la classe | Activation soumise a l'accord du formateur ; controles equivalents en pipeline (cfn-guard, checkov) |
 | Tests depuis un runner heberge | Pas de runner dans le VPC | API AWS (Reachability Analyzer, SSM) pour le prive (ADR-008) |
 | Remplacements annonces dans les piles imbriquees | Limite des change sets imbriques | Garde-fou sur suppressions et racine, relecture en PR (ADR-014) |
 | Version applicative dans le UserData | Remplacement d'instances a chaque commit | UserData stable, `app/courant/` (ADR-013) |
@@ -51,4 +53,4 @@ Incidents traites (journal) : rollback du sg-alb (23/11), blocage du test de cha
 
 ## 4. Risques acceptes
 
-Chaque derogation a un proprietaire (bkay) et une date de revue (30/11/2026) : role d'execution aux actions `service:*` (ADR-002), regles checkov non applicables (ADR-007), journaux standard CloudFront (ADR-012), absence de runner auto-heberge (ADR-008), mesure « tunnels UP » non atteignable (ADR-015).
+Chaque derogation a un proprietaire (bkay) et une date de revue (30/11/2026) : role d'execution aux actions `service:*` (ADR-002), regles checkov non applicables (ADR-007), journaux standard CloudFront (ADR-012), absence de runner auto-heberge (ADR-008), mesure « tunnels UP » non atteignable (ADR-015), exceptions SonarQube et CVE des outils CI (ADR-016).
