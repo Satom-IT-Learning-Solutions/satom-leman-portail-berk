@@ -4,9 +4,16 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 
 ## Indicateurs DORA (mis a jour a chaque sprint)
 
-| Sprint | Deploiements dev / prod | Delai commit -> prod | Taux d'echec des changements | MTTR |
-|---|---|---|---|---|
-| G0 | 0 / 0 | - | - | - |
+Source : historique GitHub Actions du workflow `pipeline-devsecops` sur `main` (20 executions du 23/11 au 25/11/2026, dont 18 avec une etape de deploiement dev).
+
+| Periode | Deploiements dev (reussis / tentes) | Deploiements prod | Delai commit -> prod | Taux d'echec des changements | MTTR (echec -> correctif deploye) |
+|---|---|---|---|---|---|
+| G0 et sprints 1-3, 9-12 (23/11) | 1 / 7 | 0 | - | 6 / 7 = 86 % (mise au point OIDC, IAM, noms de SG) | 26 min puis 39 min (temps actif) |
+| Sprints 11 et 13 (24/11) | 3 / 9 | 0 | - | 6 / 9 = 67 % (garde-fou des change sets, k6) | 64 min |
+| Sprints 4 a 8 et prod (25/11) | 2 / 2 | 1 | **31 min** (commit 07:49 -> prod 08:20 UTC, approbation manuelle comprise) | 0 / 2 = 0 % | - |
+| **Total** | **6 / 18** | **1** | 31 min | **12 / 18 = 67 %** (en baisse : 0 % sur la derniere periode) | **~43 min** (moyenne) |
+
+Lecture : le taux d'echec eleve des deux premiers jours correspond a la mise au point de la chaine (droits OIDC et IAM, comportement des change sets imbriques) ; chaque echec est arrete par la pipeline avant d'atteindre prod, documente dans ce journal et corrige par une PR. Aucun echec n'a touche la prod.
 
 ## Entrees
 
@@ -63,3 +70,13 @@ Region : eu-north-1 (Stockholm, voir ADR-010), certificats CloudFront en us-east
 - Sprint 6 (pile `stack-leman-tgw`, ASN 64512) : table prod -> 10.1.0.0/16 (dev) seulement, table dev -> 10.0.0.0/16 (prod) seulement ; Reachability Analyzer dev-01 -> app-01 prod tcp/8080 accessible via `tgw-attach` > `tgw-rtb` > `tgw-attach`.
 - Sprint 7 (pile `stack-leman-vpn`) : deux connexions IKEv2 / AES-256 / DH 14, attachements associes et propages dans la seule table prod ; secret `leman/vpn-precles-bkay` cree par la pipeline sans affichage des valeurs. Quatre tunnels DOWN (passerelles fictives, ADR-015), `TunnelState` = 0, alarmes `alarm-vpn-siege-bkay` et `alarm-vpn-agence-bkay` en ALARM apres 5 minutes (notification SNS).
 - Piles VPN et TGW supprimees a ~09:13 UTC (facturation horaire).
+- Sprint 8 (piles `stack-leman-tgw` puis `stack-leman-dxgw`) : `dxgw-leman-tp-bkay` (ASN 64513) `associated` a la TGW, seul 10.0.0.0/16 autorise vers les sites, attachement `direct-connect-gateway` disponible. Piles supprimees a 09:25 UTC.
+- Verification de conformite : Security Hub non active sur le compte (`not subscribed`), aucun detecteur GuardDuty ni enregistreur AWS Config. Activation au niveau du compte partage en attente de l'accord de Berk / du formateur.
+- Abonnements SNS dev et prod en `PendingConfirmation` : confirmation demandee a Berk avant le test d'alarme de bout en bout.
+
+### 25/11/2026 - SonarQube Cloud (gate G1)
+- Installation de l'app GitHub SonarQubeCloud refusee faute de droits d'administration sur l'organisation (demande transmise puis abandonnee). Organisation SonarQube Cloud `leman-berk` creee manuellement (plan Free, projet public `leman-berk_satom-leman-portail-berk`), jeton `SONAR_TOKEN` ajoute par Berk dans les secrets du depot (PR #23).
+- Premiere analyse de `main` en echec : branche principale nommee `master` cote SonarQube (renommee `main`). Seconde analyse : quality gate FAILED, **35 problemes de securite (note E)**.
+- Correction (PR #24, ADR-016) : 21 problemes corriges dans le code (actions GitHub epinglees par SHA, dependances Python verrouillees avec empreintes et installees en roues binaires `--require-hashes`, `curl --proto '=https'`, exclusion du cas negatif cfn-guard, chemins de couverture) ; 14 exceptions d'architecture acceptees et justifiees (`sonar.issue.ignore.multicriteria`).
+- pip-audit : bloquant sur les dependances du projet ; informatif sur les outils CI (checkov et Semgrep imposent des versions de `mcp`, `asteval`, `opentelemetry-api` avec CVE connues, non corrigibles de notre cote).
+- Resultat sur `main` : **quality gate PASSED**, securite A (0 probleme), fiabilite A, couverture 92,9 %, 0 hotspot. Pipeline `main` vert jusqu'a l'etape 5 (dev, k6, ZAP) ; un ancien run en attente d'approbation prod, devenu obsolete et bloquant la file `concurrency`, a ete annule.
