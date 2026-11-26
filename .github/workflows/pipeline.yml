@@ -7,6 +7,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+    # Un commit de documentation seule ne redeploie pas l'infrastructure
+    paths-ignore: ['docs/**', '*.md']
   workflow_dispatch:
 
 permissions:
