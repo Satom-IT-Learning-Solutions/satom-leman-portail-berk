@@ -28,12 +28,12 @@ jobs:
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - name: Outils
-        run: pip install -r requirements-dev.txt
+        run: pip install --only-binary ':all:' --require-hashes -r requirements-dev.txt
       - name: cfn-lint (templates)
         run: |
           cfn-lint
@@ -43,11 +43,11 @@ jobs:
         run: shellcheck -x scripts/*.sh tests/connectivity/*.sh tests/mesures/*.sh
       - name: Tests unitaires et couverture
         run: python -m pytest --cov --cov-report=xml:coverage.xml --cov-report=term
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: {name: couverture, path: coverage.xml}
       - name: Analyse SonarQube Cloud et quality gate
         if: ${{ env.SONAR_TOKEN != '' }}
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5
         with:
           args: -Dsonar.qualitygate.wait=true
 
@@ -56,13 +56,15 @@ jobs:
     name: 2 - Securite statique
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
+      - name: Outils de securite (versions verrouillees)
+        run: pip install --only-binary ':all:' --require-hashes --no-deps -r requirements-securite.txt
       - name: cfn-guard (regles du portail)
         run: |
-          curl -sSL -o guard.tgz https://github.com/aws-cloudformation/cloudformation-guard/releases/download/3.1.2/cfn-guard-v3-x86_64-ubuntu-latest.tar.gz
+          curl --proto '=https' --tlsv1.2 -sSL -o guard.tgz https://github.com/aws-cloudformation/cloudformation-guard/releases/download/3.1.2/cfn-guard-v3-x86_64-ubuntu-latest.tar.gz
           tar xzf guard.tgz && GUARD=cfn-guard-v3-x86_64-ubuntu-latest/cfn-guard
           $GUARD validate -d templates/ -d bootstrap/ -r policies/guard/portail.guard --show-summary fail
           # Test de non-regression : un SG avec SSH ouvert au monde DOIT etre refuse
@@ -71,20 +73,20 @@ jobs:
           echo "Cas negatif correctement refuse"
       - name: checkov (IaC et workflows)
         run: |
-          pip install checkov
           checkov -d . --config-file policies/checkov/.checkov.yaml
       - name: Semgrep (SAST)
         run: |
-          pip install semgrep
           semgrep scan --config p/python --config p/secrets --severity ERROR --error app scripts
       - name: gitleaks (secrets, tout l'historique)
         run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          curl --proto '=https' --tlsv1.2 -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
           ./gitleaks git --redact --verbose --exit-code 1 .
       - name: pip-audit (dependances, SCA)
         run: |
-          pip install pip-audit
-          pip-audit -r requirements-dev.txt --strict --desc
+          pip-audit -r requirements-dev.txt --no-deps --disable-pip --strict --desc
+      - name: pip-audit des outils CI (informatif, suivi ADR-016)
+        continue-on-error: true
+        run: pip-audit -r requirements-securite.txt --no-deps --disable-pip --desc
       - name: Controle des CIDR (sprint 5)
         run: python scripts/verifier_cidr.py parameters
 
@@ -94,15 +96,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: [qualite, securite-statique]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: SBOM CycloneDX (Syft)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
           format: cyclonedx-json
           output-file: sbom/sbom-${{ github.sha }}.cdx.json
           upload-artifact: false
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: {name: sbom, path: sbom/}
 
   # -------------------------------------------------------- 4. Deploiement dev
@@ -116,8 +118,8 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
           aws-region: ${{ env.AWS_REGION }}
@@ -133,8 +135,8 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
           aws-region: ${{ env.AWS_REGION }}
@@ -145,17 +147,17 @@ jobs:
         run: echo "url=$(tests/connectivity/url_publique.sh dev)" >> "$GITHUB_OUTPUT"
       - name: Installation de k6
         if: steps.cible.outputs.url != ''
-        uses: grafana/setup-k6-action@v1
+        uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1
       - name: Charge k6 et verification des SLO
         if: steps.cible.outputs.url != ''
-        uses: grafana/run-k6-action@v1
+        uses: grafana/run-k6-action@54385d2a25c222a08b4a3aec6b653b8fb370a1ed # v1
         env:
           CIBLE: ${{ steps.cible.outputs.url }}
         with:
           path: tests/load/charge.js
       - name: OWASP ZAP baseline (DAST)
         if: steps.cible.outputs.url != ''
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
         with:
           target: ${{ steps.cible.outputs.url }}
           rules_file_name: tests/dast/zap-regles.tsv
@@ -171,7 +173,7 @@ jobs:
           test "$HIGH" -eq 0
       - name: Rapports de tests dynamiques
         if: always() && steps.cible.outputs.url != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rapports-tests-dynamiques
           path: |
@@ -190,8 +192,8 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
           aws-region: ${{ env.AWS_REGION }}
@@ -207,8 +209,8 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ env.ROLE_DEPLOIEMENT }}
           aws-region: ${{ env.AWS_REGION }}
